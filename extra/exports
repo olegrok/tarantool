@@ -79,6 +79,23 @@ tnt_EVP_MD_CTX_new
 tnt_EVP_MD_CTX_free
 tnt_HMAC_CTX_new
 tnt_HMAC_CTX_free
+EVP_DigestInit_ex
+EVP_DigestUpdate
+EVP_DigestFinal_ex
+EVP_get_digestbyname
+HMAC_Init_ex
+HMAC_Update
+HMAC_Final
+EVP_CIPHER_CTX_new
+EVP_CIPHER_CTX_free
+EVP_CipherInit_ex
+EVP_CipherUpdate
+EVP_CipherFinal_ex
+EVP_CIPHER_CTX_cleanup
+EVP_CIPHER_block_size
+EVP_get_cipherbyname
+ERR_get_string
+ERR_error_string
 
 # Module API
 

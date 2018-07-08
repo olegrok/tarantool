@@ -116,7 +116,10 @@ set (CMAKE_CXX_FLAGS_RELWITHDEBINFO
 unset(CC_DEBUG_OPT)
 
 check_include_file(libunwind.h HAVE_LIBUNWIND_H)
-find_library(UNWIND_LIBRARY PATH_SUFFIXES system NAMES unwind)
+if(BUILD_STATIC)
+    set(UNWIND_STATIC libunwind.a)
+endif()
+find_library(UNWIND_LIBRARY PATH_SUFFIXES system NAMES ${UNWIND_STATIC} unwind)
 
 set(ENABLE_BACKTRACE_DEFAULT OFF)
 if (UNWIND_LIBRARY AND HAVE_LIBUNWIND_H)
@@ -137,19 +140,32 @@ if (ENABLE_BACKTRACE)
     else()
         if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR
             CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+            if(BUILD_STATIC)
+                set(UNWIND_PLATFORM_STATIC "libunwind-${CMAKE_SYSTEM_PROCESSOR}.a")
+            endif()
             find_library(UNWIND_PLATFORM_LIBRARY PATH_SUFFIXES system
-                         NAMES "unwind-${CMAKE_SYSTEM_PROCESSOR}")
+		    NAMES ${UNWIND_PLATFORM_STATIC}
+			 "unwind-${CMAKE_SYSTEM_PROCESSOR}")
         elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "i686")
+            if(BUILD_STATIC)
+                set(UNWIND_PLATFORM_STATIC "libunwind-x86.a")
+            endif()
             find_library(UNWIND_PLATFORM_LIBRARY PATH_SUFFIXES system
-                         NAMES "unwind-x86")
+                         NAMES ${UNWIND_PLATFORM_STATIC} "unwind-x86")
         elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
+            if(BUILD_STATIC)
+                set(UNWIND_PLATFORM_STATIC "libunwind-arm.a")
+            endif()
             find_library(UNWIND_PLATFORM_LIBRARY PATH_SUFFIXES system
-                         NAMES "unwind-arm")
+                         NAMES ${UNWIND_PLATFORM_STATIC} "unwind-arm")
         endif()
-        set (UNWIND_LIBRARIES ${UNWIND_LIBRARY} ${UNWIND_PLATFORM_LIBRARY})
+        set (UNWIND_LIBRARIES ${UNWIND_PLATFORM_LIBRARY} ${UNWIND_LIBRARY})
     endif()
     find_package_message(UNWIND_LIBRARIES "Found unwind" "${UNWIND_LIBRARIES}")
 endif()
+
+# Static linking for c++ routines
+add_compile_flags("C;CXX" "-static-libgcc" "-static-libstdc++")
 
 #
 # Set flags for all include files: those maintained by us and
@@ -258,11 +274,6 @@ macro(enable_tnt_compile_flags)
         add_compile_flags("C;CXX" "-Werror")
     endif()
 endmacro(enable_tnt_compile_flags)
-
-if (HAVE_OPENMP)
-    add_compile_flags("C;CXX" "-fopenmp")
-endif()
-
 
 if (CMAKE_COMPILER_IS_CLANG OR CMAKE_COMPILER_IS_GNUCC)
     set(HAVE_BUILTIN_CTZ 1)

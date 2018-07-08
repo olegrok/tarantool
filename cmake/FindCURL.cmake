@@ -16,6 +16,11 @@
 #   CURL_FOUND          - True if curl found.
 #   CURL_VERSION_STRING - the version of curl found (since CMake 2.8.8)
 
+if(BUILD_STATIC)
+    set(CURL_STATIC libcurl.a)
+    set(Z_LIBRARY_STATIC libz.a)
+endif()
+
 if(DEFINED CURL_ROOT)
     set(CURL_FIND_OPTS NO_CMAKE NO_CMAKE_SYSTEM_PATH)
     set(CURL_FIND_LIBRARY_HINTS "${CURL_ROOT}/lib")
@@ -36,6 +41,7 @@ mark_as_advanced(CURL_INCLUDE_DIR)
 
 # Look for the library (sorted from most current/relevant entry to least).
 find_library(CURL_LIBRARY NAMES
+    ${CURL_STATIC}
     curl
   # Windows MSVC prebuilts:
     curllib
@@ -65,10 +71,15 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(CURL
                                   REQUIRED_VARS CURL_LIBRARY CURL_INCLUDE_DIR
                                   VERSION_VAR CURL_VERSION_STRING)
 
+find_library(Z_LIBRARY NAMES
+    ${Z_LIBRARY_STATIC}
+    z
+)
+
 if(CURL_FOUND)
   set(CURL_LIBRARIES ${CURL_LIBRARY})
   set(CURL_INCLUDE_DIRS ${CURL_INCLUDE_DIR})
-  set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
+  set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES} ${Z_LIBRARY} pthread dl)
   set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
   check_c_source_runs("
     #include <curl/curl.h>

@@ -107,18 +107,19 @@ endif ()
 
 add_library(core STATIC ${core_sources})
 target_link_libraries(core
-    salad small pthread
+    salad small
     ${LIBEV_LIBRARIES}
     ${LIBEIO_LIBRARIES}
     ${LIBCORO_LIBRARIES}
     ${MSGPUCK_LIBRARIES}
+    dl pthread
 )
 
 add_library(stat STATIC rmean.c latency.c histogram.c)
 target_link_libraries(stat core)
 
 if (ENABLE_BACKTRACE AND NOT TARGET_OS_DARWIN)
-	target_link_libraries(core gcc_s ${UNWIND_LIBRARIES})
+    target_link_libraries(core gcc_s ${UNWIND_LIBRARIES})
 endif()
 
 if (CC_HAS_WNO_IMPLICIT_FALLTHROUGH)
@@ -218,12 +219,18 @@ target_link_libraries(server core bit uri uuid ${ICU_LIBRARIES})
 set (reexport_libraries server core misc bitset csv
      ${LUAJIT_LIBRARIES} ${MSGPUCK_LIBRARIES} ${ICU_LIBRARIES})
 
+if(BUILD_STATIC)
+    set(Z_STATIC libz.a)
+endif()
+find_library(Z_LIBRARY NAMES ${Z_STATIC} z)
+
 set (common_libraries
     ${reexport_libraries}
     ${LIBYAML_LIBRARIES}
     ${READLINE_LIBRARIES}
-    ${OPENSSL_LIBRARIES}
     ${CURL_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
+    ${Z_STATIC}
 )
 
 if (TARGET_OS_LINUX OR TARGET_OS_DEBIAN_FREEBSD)
@@ -248,12 +255,37 @@ endif()
 set (common_libraries ${common_libraries} ${LIBUUID_LIBRARIES})
 set (common_libraries ${common_libraries} PARENT_SCOPE)
 
+set (generic_libraries pthread dl)
+
 add_subdirectory(lib)
 add_subdirectory(box)
 
 # Save CMAKE_XXX_FLAGS from this directory for config.h (used in --version)
 set(TARANTOOL_C_FLAGS ${CMAKE_C_FLAGS} PARENT_SCOPE)
 set(TARANTOOL_CXX_FLAGS ${CMAKE_CXX_FLAGS} PARENT_SCOPE)
+
+set(EXPORT_LIST)
+if(BUILD_STATIC)
+    foreach(libstatic
+            ${READLINE_LIBRARIES}
+            ${CURL_LIBRARIES}
+            ${OPENSSL_LIBRARIES}
+            ${ICU_LIBRARIES}
+            ${Z_STATIC}
+            ${LIBYAML_LIBRARIES})
+        if (${libstatic} MATCHES "lib[^/]+.a")
+            string(REGEX MATCH "lib[^/]+.a" libname ${libstatic})
+            string(REGEX REPLACE "\\.a$" "" libname ${libname})
+            string(REGEX REPLACE "^lib" "" libname ${libname})
+            find_library(SYMBOLS_LIB NAMES ${libname})
+            list(APPEND EXPORT_LIST ${SYMBOLS_LIB})
+            set(SYMBOLS_LIB "SYMBOLS_LIB-NOTFOUND")
+        else()
+            message(WARNING "${libstatic} should be a static")
+        endif()
+    endforeach(libstatic)
+    string(REPLACE ";" " " EXPORT_LIST "${EXPORT_LIST}")
+endif()
 
 # Exports syntax is toolchain-dependent, preprocessing is necessary
 set(exports_file ${CMAKE_BINARY_DIR}/extra/exports.${CMAKE_SYSTEM_NAME})
@@ -264,12 +296,14 @@ add_custom_command(
     DEPENDS ${CMAKE_SOURCE_DIR}/extra/exports
     COMMAND ${CMAKE_SOURCE_DIR}/extra/mkexports
             ${CMAKE_SOURCE_DIR}/extra/exports
-            ${exports_file} ${CMAKE_SYSTEM_NAME})
+            ${exports_file} ${CMAKE_SYSTEM_NAME}
+            ${EXPORT_LIST}
+)
 
 add_executable(
-	tarantool main.cc
-	${LIBUTIL_FREEBSD_SRC}/flopen.c
-	${LIBUTIL_FREEBSD_SRC}/pidfile.c)
+    tarantool main.cc
+    ${LIBUTIL_FREEBSD_SRC}/flopen.c
+    ${LIBUTIL_FREEBSD_SRC}/pidfile.c)
 
 add_dependencies(tarantool build_bundled_libs preprocess_exports)
 
@@ -294,7 +328,9 @@ if (TARGET_OS_DARWIN)
     set_target_properties(tarantool PROPERTIES
         LINK_FLAGS "-Wl,-exported_symbols_list,${exports_file}")
 else ()
+    message(${reexport_libraries} ${common_libraries})
     target_link_libraries(tarantool
+                      ${generic_libraries}
                           -Wl,--whole-archive box ${reexport_libraries}
                           salad -Wl,--no-whole-archive
                           ${common_libraries})
