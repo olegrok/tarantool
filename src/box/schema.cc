@@ -338,8 +338,23 @@ schema_init()
 	 */
 	sc_space_new(BOX_CLUSTER_ID, "_cluster", key_def, &on_replace_cluster,
 		     NULL);
-
 	key_def_delete(key_def);
+
+	key_def = key_def_new(4);
+	if (key_def == NULL)
+		diag_raise();
+	key_def_set_part(key_def, 0, 0, FIELD_TYPE_UNSIGNED, false, NULL,
+			 COLL_NONE);
+	key_def_set_part(key_def, 1, 1, FIELD_TYPE_STRING, false, NULL,
+			 COLL_NONE);
+	key_def_set_part(key_def, 2, 2, FIELD_TYPE_UNSIGNED, false, NULL,
+			 COLL_NONE);
+	key_def_set_part(key_def, 3, 3, FIELD_TYPE_STRING, false, NULL,
+			 COLL_NONE);
+	sc_space_new(BOX_PROMOTION_ID, "_promotion", key_def,
+		     &alter_space_on_replace_promotion, NULL);
+	key_def_delete(key_def);
+
 	key_def = key_def_new(2); /* part count */
 	if (key_def == NULL)
 		diag_raise();

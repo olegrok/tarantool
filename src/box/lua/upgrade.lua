@@ -964,6 +964,24 @@ local function upgrade_to_1_10_0()
     create_vsequence_space()
 end
 
+local function upgrade_to_1_10_2()
+    log.info('create space _promotion')
+    local format = {
+        {name = 'id', type = 'unsigned'},
+        {name = 'round_uuid', type = 'string'},
+        {name = 'step', type = 'unsigned'},
+        {name = 'source_uuid', type = 'string'},
+        {name = 'ts', type = 'number'},
+        {name = 'type', type = 'string'},
+        {name = 'value', type = 'map', is_nullable = true}
+    }
+    box.space._space:insert({box.space._promotion.id, ADMIN, '_promotion',
+                             'memtx', 0, setmap({}), format})
+    log.info('create index primary on _promotion')
+    box.space._index:insert({box.space._promotion.id, 0, 'primary', 'tree',
+                             {unique = true}, {{0, 'unsigned'}, {1, 'string'},
+                             {2, 'unsigned'}, {3, 'string'}}})
+end
 
 local function get_version()
     local version = box.space._schema:get{'version'}
@@ -991,6 +1009,7 @@ local function upgrade(options)
         {version = mkversion(1, 7, 6), func = upgrade_to_1_7_6, auto = false},
         {version = mkversion(1, 7, 7), func = upgrade_to_1_7_7, auto = true},
         {version = mkversion(1, 10, 0), func = upgrade_to_1_10_0, auto = true},
+        {version = mkversion(1, 10, 2), func = upgrade_to_1_10_2, auto = true},
     }
 
     for _, handler in ipairs(handlers) do
