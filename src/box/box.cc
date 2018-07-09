@@ -161,7 +161,7 @@ box_check_memtx_min_tuple_size(ssize_t memtx_min_tuple_size)
 }
 
 static int
-process_rw(struct request *request, struct space *space, struct tuple **result)
+process_dml(struct request *request, struct space *space, struct tuple **result)
 {
 	assert(iproto_type_is_dml(request->type));
 	rmean_collect(rmean_box, request->type, 1);
@@ -301,7 +301,7 @@ apply_row(struct xstream *stream, struct xrow_header *row)
 		return;
 	}
 	struct space *space = space_cache_find_xc(request.space_id);
-	if (process_rw(&request, space, NULL) != 0) {
+	if (process_dml(&request, space, NULL) != 0) {
 		say_error("error applying row: %s", request_str(&request));
 		diag_raise();
 	}
@@ -901,7 +901,7 @@ boxk(int type, uint32_t space_id, const char *format, ...)
 	struct space *space = space_cache_find(space_id);
 	if (space == NULL)
 		return -1;
-	return process_rw(&request, space, NULL);
+	return process_dml(&request, space, NULL);
 }
 
 int
@@ -965,7 +965,7 @@ box_index_id_by_name(uint32_t space_id, const char *name, uint32_t len)
 /** \endcond public */
 
 int
-box_process1(struct request *request, box_tuple_t **result)
+box_process_dml(struct request *request, box_tuple_t **result)
 {
 	/* Allow to write to temporary spaces in read-only mode. */
 	struct space *space = space_cache_find(request->space_id);
@@ -975,7 +975,7 @@ box_process1(struct request *request, box_tuple_t **result)
 	    space_group_id(space) != GROUP_LOCAL &&
 	    box_check_writable() != 0)
 		return -1;
-	return process_rw(request, space, result);
+	return process_dml(request, space, result);
 }
 
 int
@@ -1064,7 +1064,7 @@ box_insert(uint32_t space_id, const char *tuple, const char *tuple_end,
 	request.space_id = space_id;
 	request.tuple = tuple;
 	request.tuple_end = tuple_end;
-	return box_process1(&request, result);
+	return box_process_dml(&request, result);
 }
 
 int
@@ -1078,7 +1078,7 @@ box_replace(uint32_t space_id, const char *tuple, const char *tuple_end,
 	request.space_id = space_id;
 	request.tuple = tuple;
 	request.tuple_end = tuple_end;
-	return box_process1(&request, result);
+	return box_process_dml(&request, result);
 }
 
 int
@@ -1093,7 +1093,7 @@ box_delete(uint32_t space_id, uint32_t index_id, const char *key,
 	request.index_id = index_id;
 	request.key = key;
 	request.key_end = key_end;
-	return box_process1(&request, result);
+	return box_process_dml(&request, result);
 }
 
 int
@@ -1114,7 +1114,7 @@ box_update(uint32_t space_id, uint32_t index_id, const char *key,
 	/** Legacy: in case of update, ops are passed in in request tuple */
 	request.tuple = ops;
 	request.tuple_end = ops_end;
-	return box_process1(&request, result);
+	return box_process_dml(&request, result);
 }
 
 int
@@ -1134,7 +1134,7 @@ box_upsert(uint32_t space_id, uint32_t index_id, const char *tuple,
 	request.tuple = tuple;
 	request.tuple_end = tuple_end;
 	request.index_base = index_base;
-	return box_process1(&request, result);
+	return box_process_dml(&request, result);
 }
 
 /**

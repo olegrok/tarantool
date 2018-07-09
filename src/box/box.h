@@ -391,14 +391,16 @@ box_sequence_reset(uint32_t seq_id);
 /** \endcond public */
 
 /**
- * The main entry point to the
- * Box: callbacks into the request processor.
- * These are function pointers since they can
- * change when entering/leaving read-only mode
- * (master->slave propagation).
+ * The main entry point to DML operations:
+ * INSERT/REPLACE/DELETE/UPDATE/UPSERT.
+ * @param request Request to process.
+ * @param[out] result Result tuple, can be NULL.
+ *
+ * @retval 0 Success.
+ * @retval -1 Error.
  */
 int
-box_process1(struct request *request, box_tuple_t **result);
+box_process_dml(struct request *request, box_tuple_t **result);
 
 int
 boxk(int type, uint32_t space_id, const char *format, ...);

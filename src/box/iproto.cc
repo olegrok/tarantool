@@ -1368,7 +1368,7 @@ tx_process1(struct cmsg *m)
 	struct obuf_svp svp;
 	struct obuf *out;
 	tx_inject_delay();
-	if (box_process1(&msg->dml, &tuple) != 0)
+	if (box_process_dml(&msg->dml, &tuple) != 0)
 		goto error;
 	out = msg->connection->tx.p_obuf;
 	if (iproto_prepare_select(out, &svp) != 0)
