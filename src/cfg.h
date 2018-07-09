@@ -61,6 +61,9 @@ cfg_getarr_size(const char *name);
 const char *
 cfg_getarr_elem(const char *name, int i);
 
+void
+cfg_rawsetb(const char *name, bool b);
+
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif /* defined(__cplusplus) */

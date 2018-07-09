@@ -167,11 +167,10 @@ lbox_cfg_set_checkpoint_count(struct lua_State *L)
 static int
 lbox_cfg_set_read_only(struct lua_State *L)
 {
-	try {
-		box_set_ro(cfg_geti("read_only") != 0);
-	} catch (Exception *) {
-		luaT_error(L);
-	}
+	bool new_value = cfg_geti("read_only") != 0;
+	if (box_check_ro_is_mutable() != 0 && new_value != box_is_ro())
+		return luaT_error(L);
+	box_set_ro(new_value);
 	return 0;
 }
 

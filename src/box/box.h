@@ -86,6 +86,25 @@ box_atfork(void);
 void
 box_set_ro(bool ro);
 
+/**
+ * Expose current read-only flag into Lua config as
+ * box.cfg.read_only. Used when the value is changed internally,
+ * for example, by box.ctl.promote.
+ */
+void
+box_expose_ro();
+
+/**
+ * Check that read-only value can be changed via box.cfg. It can
+ * be immutable when a promotion is used, so that a user should
+ * either manipulate the flag manually or trust to
+ * box.ctl.promote.
+ * @retval 0 Success.
+ * @retval -1 Error. Diag is set.
+ */
+int
+box_check_ro_is_mutable();
+
 bool
 box_is_writable(void);
 
@@ -404,6 +423,14 @@ box_sequence_reset(uint32_t seq_id);
  */
 int
 box_process_dml(struct request *request, box_tuple_t **result);
+
+/**
+ * Process DML operation on a system space without any RO checks.
+ * Can be used internally only. @Sa box_process_dml for the
+ * parameter and the returned value.
+ */
+int
+box_process_sys_dml(struct request *request);
 
 int
 boxk(int type, uint32_t space_id, const char *format, ...);

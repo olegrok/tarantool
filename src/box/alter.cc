@@ -52,6 +52,7 @@
 #include "identifier.h"
 #include "version.h"
 #include "sequence.h"
+#include "promote.h"
 
 /**
  * chap-sha1 of empty string, i.e.
@@ -2924,11 +2925,69 @@ on_replace_dd_cluster(struct trigger *trigger, void *event)
 	txn_on_commit(txn, on_commit);
 }
 
+/**
+ * Process promotion messages on commit only. Prepared but not
+ * committed messages can not be processed since they could
+ * rollback, but promotion requires each processed message is
+ * persisted and is able to recovery on restart.
+ */
 static void
-on_replace_dd_promotion(struct trigger *trigger, void *event)
+on_commit_process_promote_msg(struct trigger *trigger, void *event)
+{
+	(void) event;
+	promote_process((struct promote_msg *) trigger->data);
+}
+
+/**
+ * Check that the promotion space is empty and reset for this
+ * case the state. Manual reset here is used by replicas when on
+ * one of them box.ctl.promote_reset() is called. Then on the
+ * source replica the promotion state is dropped but on other
+ * replicas this action should be done under the hood. This is the
+ * only possible place to do it.
+ */
+static void
+on_commit_check_promotion_reset(struct trigger *trigger, void *event)
 {
 	(void) trigger;
 	(void) event;
+	if (index_count(space_index(space_by_id(BOX_PROMOTION_ID), 0), ITER_ALL,
+			NULL, 0) == 0)
+		box_ctl_promote_reset();
+}
+
+static void
+on_replace_dd_promotion(struct trigger *trigger, void *event)
+{
+	struct txn *txn = (struct txn *) event;
+	struct txn_stmt *stmt = txn_current_stmt(txn);
+	if (stmt->new_tuple == NULL && stmt->old_tuple != NULL) {
+		trigger = txn_alter_trigger_new(on_commit_check_promotion_reset,
+						NULL);
+		txn_on_commit(txn, trigger);
+		return;
+	}
+	assert(stmt->new_tuple != NULL);
+	if (stmt->old_tuple != NULL) {
+		tnt_raise(ClientError, ER_UNSUPPORTED, "Promotion",
+			  "history edit");
+	}
+	/*
+	 * Forbid multistatement only for non-DELETE since the
+	 * later is used for promotion reset in batches - the
+	 * whole round per one transaction is dropped.
+	 */
+	txn_check_singlestatement_xc(txn, "Space _promotion");
+	struct promote_msg *msg =
+		region_alloc_object_xc(&fiber()->gc, struct promote_msg);
+	/*
+	 * Decode the message before the commit to do message's
+	 * sanity check.
+	 */
+	if (promote_msg_decode(tuple_data(stmt->new_tuple), msg) != 0)
+		diag_raise();
+	trigger = txn_alter_trigger_new(on_commit_process_promote_msg, msg);
+	txn_on_commit(txn, trigger);
 }
 
 /* }}} cluster configuration */

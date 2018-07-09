@@ -73,6 +73,7 @@
 #include "call.h"
 #include "func.h"
 #include "sequence.h"
+#include "promote.h"
 
 static char status[64] = "unknown";
 
@@ -214,6 +215,12 @@ box_set_ro(bool ro)
 {
 	is_ro = ro;
 	fiber_cond_broadcast(&ro_cond);
+}
+
+void
+box_expose_ro()
+{
+	cfg_rawsetb("read_only", is_ro);
 }
 
 bool
@@ -969,6 +976,15 @@ box_index_id_by_name(uint32_t space_id, const char *name, uint32_t len)
 	return result;
 }
 /** \endcond public */
+
+int
+box_process_sys_dml(struct request *request)
+{
+	struct space *space = space_cache_find(request->space_id);
+	assert(space != NULL);
+	assert(space_is_system(space));
+	return process_dml(request, space, NULL);
+}
 
 int
 box_process_dml(struct request *request, box_tuple_t **result)
@@ -1981,6 +1997,7 @@ box_cfg_xc(void)
 	port_init();
 	iproto_init();
 	wal_thread_start();
+	box_ctl_promote_init();
 
 	title("loading");
 

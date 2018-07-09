@@ -153,3 +153,14 @@ cfg_getarr_elem(const char *name, int i)
 	lua_pop(tarantool_L, 2);
 	return val;
 }
+
+void
+cfg_rawsetb(const char *name, bool b)
+{
+	lua_getfield(tarantool_L, LUA_GLOBALSINDEX, "box");
+	lua_getfield(tarantool_L, -1, "cfg");
+	lua_pushstring(tarantool_L, name);
+	lua_pushboolean(tarantool_L, b);
+	lua_rawset(tarantool_L, -3);
+	lua_pop(tarantool_L, 2);
+}

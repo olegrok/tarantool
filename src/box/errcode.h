@@ -208,6 +208,9 @@ struct errcode_record {
 	/*153 */_(ER_NULLABLE_MISMATCH,		"Field %d is %s in space format, but %s in index parts") \
 	/*154 */_(ER_TRANSACTION_YIELD,		"Transaction has been aborted by a fiber yield") \
 	/*155 */_(ER_NO_SUCH_GROUP,		"Replication group '%s' does not exist") \
+	/*156 */_(ER_PROMOTE,			"Error during promotion with round UUID '%s': %s") \
+	/*157 */_(ER_WRONG_PROMOTION_RECORD,	"Wrong record in _promotion (field %u): %s") \
+	/*158 */_(ER_PROMOTE_EXISTS,		"Promotion is in progress") \
 
 /*
  * !IMPORTANT! Please follow instructions at start of the file

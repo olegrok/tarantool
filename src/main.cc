@@ -514,6 +514,7 @@ load_cfg()
 	 */
 	say_crit("%s %s", tarantool_package(), tarantool_version());
 	say_crit("log level %i", cfg_geti("log_level"));
+	box_set_ro(cfg_geti("read_only") != 0);
 
 	if (pid_file_handle != NULL) {
 		if (pidfile_write(pid_file_handle) == -1)
