@@ -239,7 +239,7 @@ index_opts_decode(struct index_opts *opts, const char *map)
 {
 	index_opts_create(opts);
 	if (opts_decode(opts, index_opts_reg, &map, ER_WRONG_INDEX_OPTIONS,
-			BOX_INDEX_FIELD_OPTS, NULL) != 0)
+			BOX_INDEX_FIELD_OPTS, NULL, 0) != 0)
 		diag_raise();
 	if (opts->distance == rtree_index_distance_type_MAX) {
 		tnt_raise(ClientError, ER_WRONG_INDEX_OPTIONS,
@@ -403,8 +403,8 @@ space_opts_decode(struct space_opts *opts, const char *data)
 				flags++;
 		}
 	} else if (opts_decode(opts, space_opts_reg, &data,
-			       ER_WRONG_SPACE_OPTIONS,
-			       BOX_SPACE_FIELD_OPTS, NULL) != 0) {
+			       ER_WRONG_SPACE_OPTIONS, BOX_SPACE_FIELD_OPTS,
+			       NULL, 0) != 0) {
 		diag_raise();
 	}
 }
@@ -2382,8 +2382,8 @@ coll_id_def_new_from_tuple(const struct tuple *tuple, struct coll_id_def *def)
 
 	assert(base->type == COLL_TYPE_ICU);
 	if (opts_decode(&base->icu, coll_icu_opts_reg, &options,
-			ER_WRONG_COLLATION_OPTIONS,
-			BOX_COLLATION_FIELD_OPTIONS, NULL) != 0)
+			ER_WRONG_COLLATION_OPTIONS, BOX_COLLATION_FIELD_OPTIONS,
+			NULL, 0) != 0)
 		diag_raise();
 
 	if (base->icu.french_collation == coll_icu_on_off_MAX) {

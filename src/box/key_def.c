@@ -454,7 +454,7 @@ key_def_decode_parts(struct key_part_def *parts, uint32_t part_count,
 		*part = key_part_def_default;
 		if (opts_decode(part, part_def_reg, data,
 				ER_WRONG_INDEX_OPTIONS, i + TUPLE_INDEX_BASE,
-				NULL) != 0)
+				NULL, 0) != 0)
 			return -1;
 		if (part->type == field_type_MAX) {
 			diag_set(ClientError, ER_WRONG_INDEX_OPTIONS,

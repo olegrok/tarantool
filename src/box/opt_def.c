@@ -176,13 +176,10 @@ opts_parse_key(void *opts, const struct opt_def *reg, const char *key,
 	return 0;
 }
 
-/**
- * Populate key options from their msgpack-encoded representation
- * (msgpack map).
- */
 int
 opts_decode(void *opts, const struct opt_def *reg, const char **map,
-	    uint32_t errcode, uint32_t field_no, struct region *region)
+	    uint32_t errcode, uint32_t field_no, struct region *region,
+	    uint32_t exact_field_count)
 {
 	assert(mp_typeof(**map) == MP_MAP);
 
@@ -191,6 +188,12 @@ opts_decode(void *opts, const struct opt_def *reg, const char **map,
 	 * DDL is not performance-critical, so this is not a problem.
 	 */
 	uint32_t map_size = mp_decode_map(map);
+	if (map_size != exact_field_count && exact_field_count != 0) {
+		diag_set(ClientError, errcode, field_no,
+			 tt_sprintf("expected %u keys but got %u",
+				    exact_field_count, map_size));
+		return -1;
+	}
 	for (uint32_t i = 0; i < map_size; i++) {
 		if (mp_typeof(**map) != MP_STR) {
 			diag_set(ClientError, errcode, field_no,

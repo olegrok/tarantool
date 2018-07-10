@@ -83,10 +83,24 @@ struct region;
 /**
  * Populate key options from their msgpack-encoded representation
  * (msgpack map).
+ * @param[out] opts Where decode options to.
+ * @param reg Field definitions array.
+ * @param map MessagePack to decode.
+ * @param errcode Error code to set on any error. The error code
+ *        has to accept field number and description as
+ *        parameters.
+ * @param field_no Field number to set for @a errcode.
+ * @param region Region for dynamic allocations such as strings.
+ * @param exact_field_count If non-zero, then @a map should
+ *        contain exactly this count of fields.
+ *
+ * @retval 0 Success.
+ * @retval -1 Error.
  */
 int
 opts_decode(void *opts, const struct opt_def *reg, const char **map,
-	    uint32_t errcode, uint32_t field_no, struct region *region);
+	    uint32_t errcode, uint32_t field_no, struct region *region,
+	    uint32_t exact_field_count);
 
 /**
  * Decode one option and store it into @a opts struct as a field.
