@@ -55,6 +55,38 @@
 #include "box/tuple_format.h"
 #include "box/coll_id_cache.h"
 
+/**
+ * Emit access control checks. It should be noted that only
+ * checks for read need to be performed. DML/DDL requestes are
+ * checked for access by Tarantool's core.
+ *
+ * @param v Byte-code structure being translated.
+ * @retval true If a new opcode was emitted.
+ */
+static bool
+sql_emit_access_checks(struct Vdbe *v)
+{
+	bool is_code_emitted = false;
+	for(int i = 0; i < v->nOp; ++i) {
+		uint8_t op = v->aOp[i].opcode;
+		/* FIXME: when write iterators will be removed,
+		 * remove checks for OP_OpenWrite. Note, that
+		 * DML routines don't need access checks.
+		 * See gh-3182.
+		 */
+		if (op == OP_OpenRead || op == OP_OpenWrite) {
+			sqlite3VdbeAddOp4(v, OP_AccessCheck,
+					  PRIV_R,
+					  0,
+					  0,
+					  (void *)v->aOp[i].p4.space,
+					  P4_SPACEPTR);
+			is_code_emitted = true;
+		}
+	}
+	return is_code_emitted;
+}
+
 void
 sql_finish_coding(struct Parse *parse_context)
 {
@@ -76,6 +108,7 @@ sql_finish_coding(struct Parse *parse_context)
 	int last_instruction = v->nOp;
 	if (parse_context->initiateTTrans)
 		sqlite3VdbeAddOp0(v, OP_TTransaction);
+	bool is_acc_emitted = sql_emit_access_checks(v);
 	if (parse_context->pConstExpr != NULL) {
 		assert(sqlite3VdbeGetOp(v, 0)->opcode == OP_Init);
 		/*
@@ -101,7 +134,8 @@ sql_finish_coding(struct Parse *parse_context)
 	 * vdbe_end: OP_Goto 0 1 ...
 	 */
 	if (parse_context->initiateTTrans ||
-	    parse_context->pConstExpr != NULL) {
+	    parse_context->pConstExpr != NULL ||
+	    is_acc_emitted) {
 		sqlite3VdbeChangeP2(v, 0, last_instruction);
 		sqlite3VdbeGoto(v, 1);
 	}

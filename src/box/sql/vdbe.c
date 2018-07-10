@@ -5240,6 +5240,21 @@ case OP_IncMaxid: {
 	break;
 }
 
+/* Opcode: AccessCheck P1 * * P4 *
+ * Synopsis: Check P1 access rights for P4.
+ *
+ * Check access rights for space pointed by register P1.
+ * Access type is determined by P1.
+ */
+case OP_AccessCheck: {
+	struct space *space = (struct space *)pOp->p4.space;
+	if (access_check_space(space, pOp->p1) != 0) {
+		rc = SQL_TARANTOOL_ERROR;
+		goto abort_due_to_error;
+	}
+	break;
+}
+
 /* Opcode: Noop * * * * *
  *
  * Do nothing.  This instruction is often useful as a jump
