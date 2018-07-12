@@ -1102,7 +1102,7 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
 		init, TARANTOOL_SYS_SCHEMA_NAME,
 		BOX_SCHEMA_ID, 0,
 		"CREATE TABLE \""TARANTOOL_SYS_SCHEMA_NAME
-		"\" (\"key\" TEXT PRIMARY KEY, \"value\")"
+		"\" (\"key\" TEXT PRIMARY KEY, \"value\" TEXT)"
 	);
 
 	sql_init_callback(
@@ -1110,7 +1110,7 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
 		BOX_SPACE_ID, 0,
 		"CREATE TABLE \""TARANTOOL_SYS_SPACE_NAME
 		"\" (\"id\" INT PRIMARY KEY, \"owner\" INT, \"name\" TEXT, "
-		"\"engine\" TEXT, \"field_count\" INT, \"opts\", \"format\")"
+		"\"engine\" TEXT, \"field_count\" INT, \"opts\" BLOB, \"format\" BLOB)"
 	);
 
 	sql_init_callback(
@@ -1118,14 +1118,14 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
 		BOX_INDEX_ID, 0,
 		"CREATE TABLE \""TARANTOOL_SYS_INDEX_NAME"\" "
 		"(\"id\" INT, \"iid\" INT, \"name\" TEXT, \"type\" TEXT,"
-		"\"opts\", \"parts\", PRIMARY KEY (\"id\", \"iid\"))"
+		"\"opts\" BLOB, \"parts\" BLOB, PRIMARY KEY (\"id\", \"iid\"))"
 	);
 
 	sql_init_callback(
 		init, TARANTOOL_SYS_TRIGGER_NAME,
 		BOX_TRIGGER_ID, 0,
 		"CREATE TABLE \""TARANTOOL_SYS_TRIGGER_NAME"\" ("
-		"\"name\" TEXT PRIMARY KEY, \"space_id\" INT, \"opts\")"
+		"\"name\" TEXT PRIMARY KEY, \"space_id\" INT, \"opts\" BLOB)"
 	);
 
 	sql_init_callback(
@@ -1150,7 +1150,7 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
 			  "CREATE TABLE \""TARANTOOL_SYS_SQL_STAT1_NAME
 			       "\"(\"tbl\" text,"
 			       "\"idx\" text,"
-			       "\"stat\" not null,"
+			       "\"stat\" blob not null,"
 			       "PRIMARY KEY(\"tbl\", \"idx\"))");
 
 	sql_init_callback(init, TARANTOOL_SYS_SQL_STAT4_NAME,
@@ -1161,7 +1161,7 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
 			       "\"neq\" text,"
 			       "\"nlt\" text,"
 			       "\"ndlt\" text,"
-			       "\"sample\","
+			       "\"sample\" blob,"
 			       "PRIMARY KEY(\"tbl\", \"idx\", \"sample\"))");
 
 	sql_init_callback(init, TARANTOOL_SYS_FK_CONSTRAINT_NAME,
@@ -1169,7 +1169,8 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
 			  "CREATE TABLE \""TARANTOOL_SYS_FK_CONSTRAINT_NAME
 			  "\"(\"name\" TEXT, \"parent_id\" INT, \"child_id\" INT,"
 			  "\"deferred\" INT, \"match\" TEXT, \"on_delete\" TEXT,"
-			  "\"on_update\" TEXT, \"child_cols\", \"parent_cols\","
+			  "\"on_update\" TEXT, \"child_cols\" TEXT, "
+			  "\"parent_cols\" TEXT,"
 			  "PRIMARY KEY(\"name\", \"child_id\"))");
 
 	/* Read _space */
