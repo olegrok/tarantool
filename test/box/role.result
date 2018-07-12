@@ -214,7 +214,22 @@ box.schema.role.drop('test')
 box.schema.user.grant('grantee', 'liaison')
 ---
 ...
-box.schema.user.grant('test', 'read,write,create', 'universe')
+box.schema.user.grant('test', 'read,write', 'space', '_priv')
+---
+...
+box.schema.user.grant('test', 'write', 'space', '_schema')
+---
+...
+box.schema.user.grant('test', 'create', 'space')
+---
+...
+box.schema.user.grant('test', 'read,write', 'space', '_space')
+---
+...
+box.schema.user.grant('test', 'write', 'space', '_index')
+---
+...
+box.schema.user.grant('test', 'read', 'space', '_user')
 ---
 ...
 box.session.su('test')
@@ -635,7 +650,13 @@ box.schema.user.create('user')
 box.schema.user.create('grantee')
 ---
 ...
-box.schema.user.grant('user', 'read,write,execute,create', 'universe')
+box.schema.user.grant('user', 'read,write', 'space', '_user')
+---
+...
+box.schema.user.grant('user', 'read,write', 'space', '_priv')
+---
+...
+box.schema.user.grant('user', 'create', 'role')
 ---
 ...
 box.session.su('user')
