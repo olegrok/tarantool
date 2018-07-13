@@ -88,6 +88,8 @@ struct user
 	bool is_dirty;
 	/** Memory pool for privs */
 	struct region pool;
+	/** Cached runtime access imformation. */
+	struct access access[BOX_USER_MAX];
 };
 
 /** Find user by id. */

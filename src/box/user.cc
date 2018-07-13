@@ -248,12 +248,16 @@ access_find(struct priv_def *priv)
 	}
 	case SC_USER:
 	{
-		/* No grants on a single object user yet. */
+		struct user *user = user_by_id(priv->object_id);
+		if (user)
+			access = user->access;
 		break;
 	}
 	case SC_ROLE:
 	{
-		/* No grants on a single object role yet. */
+		struct user *role = user_by_id(priv->object_id);
+		if (role)
+			access = role->access;
 		break;
 	}
 	case SC_SEQUENCE:
