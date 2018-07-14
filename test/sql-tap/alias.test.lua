@@ -25,14 +25,11 @@ test:plan(9)
 --
 
 counter = 0
-sequence = function()
-    counter = counter + 1
-    return counter
-end
+sequence = function()     counter = counter + 1     return counter end
 
 -- Function is declared as deterministic deliberately.
 -- Otherwise it would be called as much as it occurs in a query.
-box.internal.sql_create_function("sequence", sequence, 0, true)
+box.internal.sql_create_function("sequence", "INT", sequence, 0, true)
 
 test:do_test(
     "alias-1.1",
