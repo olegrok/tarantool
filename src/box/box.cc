@@ -1606,6 +1606,8 @@ box_free(void)
 		tuple_free();
 		port_free();
 #endif
+		/* If listening on a unix socket, unlink it. */
+		iproto_stop_listen();
 		sequence_free();
 		gc_free();
 		engine_shutdown();

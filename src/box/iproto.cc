@@ -2015,6 +2015,22 @@ iproto_listen(const char *uri)
 	iproto_do_cfg(&cfg_msg);
 }
 
+
+/**
+ * Stop binary service.
+ *
+ * We don't have a proper iproto shutdown, iproto thread
+ * just dies and never stops listening on socket. This leaves
+ * dead unix sockets after tarantool. So we have to manually
+ * call evio_service_stop() to unink unix socket, if any.
+ * When iproto_shutdown() will be implemented, this function
+ * won't be needed anymore
+ */
+void
+iproto_stop_listen(void) {
+	evio_service_stop(&binary);
+}
+
 size_t
 iproto_mem_used(void)
 {
