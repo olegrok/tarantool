@@ -192,9 +192,9 @@ box.space._priv:select()
   - [1, 4, 'function', 3, 4]
   - [1, 4, 'role', 2, 4]
   - [1, 4, 'role', 5, 4]
-  - [1, 4, 'space', 513, 3]
+  - [1, 4, 'space', 513, 195]
   - [1, 4, 'universe', 0, 24]
-  - [1, 5, 'space', 512, 3]
+  - [1, 5, 'space', 512, 195]
   - [1, 31, 'universe', 0, 4294967295]
 ...
 box.space._vspace ~= nil
