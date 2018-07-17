@@ -1498,13 +1498,6 @@ int tarantoolSqlite3MakeIdxOpts(SqliteIndex *index, const char *zSql, void *buf)
 	p = enc->encode_map(base, 2);
 	/* Mark as unique pk and unique indexes */
 	p = enc->encode_str(p, "unique", 6);
-	/* If user didn't defined ON CONFLICT OPTIONS, all uniqueness checks
-	 * will be made by Tarantool. However, Tarantool doesn't have ON
-	 * CONFLIT option, so in that case (except ON CONFLICT ABORT, which is
-	 * default behavior) uniqueness will be checked by SQL.
-	 * INSERT OR REPLACE/IGNORE uniqueness checks will be also done by
-	 * Tarantool.
-	 */
 	p = enc->encode_bool(p, index->def->opts.is_unique);
 	p = enc->encode_str(p, "sql", 3);
 	p = enc->encode_str(p, zSql, zSql ? strlen(zSql) : 0);

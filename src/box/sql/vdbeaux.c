@@ -2381,8 +2381,7 @@ sqlite3VdbeHalt(Vdbe * p)
 					 */
 					box_txn_rollback();
 					closeCursorsAndFree(p);
-					sqlite3RollbackAll(p,
-							   SQLITE_ABORT_ROLLBACK);
+					sqlite3RollbackAll(p);
 					sqlite3CloseSavepoints(p);
 					p->nChange = 0;
 				}
@@ -2433,7 +2432,7 @@ sqlite3VdbeHalt(Vdbe * p)
 					p->rc = rc;
 					box_txn_rollback();
 					closeCursorsAndFree(p);
-					sqlite3RollbackAll(p, SQLITE_OK);
+					sqlite3RollbackAll(p);
 					p->nChange = 0;
 				} else {
 					sqlite3CommitInternalChanges();
@@ -2441,7 +2440,7 @@ sqlite3VdbeHalt(Vdbe * p)
 			} else {
 				box_txn_rollback();
 				closeCursorsAndFree(p);
-				sqlite3RollbackAll(p, SQLITE_OK);
+				sqlite3RollbackAll(p);
 				p->nChange = 0;
 			}
 			p->anonymous_savepoint = NULL;
@@ -2453,7 +2452,7 @@ sqlite3VdbeHalt(Vdbe * p)
 			} else {
 				box_txn_rollback();
 				closeCursorsAndFree(p);
-				sqlite3RollbackAll(p, SQLITE_ABORT_ROLLBACK);
+				sqlite3RollbackAll(p);
 				sqlite3CloseSavepoints(p);
 				p->nChange = 0;
 			}
@@ -2476,7 +2475,7 @@ sqlite3VdbeHalt(Vdbe * p)
 					p->zErrMsg = 0;
 				}
 				closeCursorsAndFree(p);
-				sqlite3RollbackAll(p, SQLITE_ABORT_ROLLBACK);
+				sqlite3RollbackAll(p);
 				sqlite3CloseSavepoints(p);
 				p->nChange = 0;
 			}
