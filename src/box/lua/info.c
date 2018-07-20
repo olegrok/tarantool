@@ -242,7 +242,7 @@ lbox_info_signature(struct lua_State *L)
 static int
 lbox_info_ro(struct lua_State *L)
 {
-	lua_pushboolean(L, box_is_ro());
+	lua_pushboolean(L, ! box_is_writable());
 	return 1;
 }
 

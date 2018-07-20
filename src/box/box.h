@@ -87,6 +87,9 @@ void
 box_set_ro(bool ro);
 
 bool
+box_is_writable(void);
+
+bool
 box_is_ro(void);
 
 /**

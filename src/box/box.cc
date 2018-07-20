@@ -217,16 +217,22 @@ box_set_ro(bool ro)
 }
 
 bool
+box_is_writable(void)
+{
+	return !is_ro && !is_orphan;
+}
+
+bool
 box_is_ro(void)
 {
-	return is_ro || is_orphan;
+	return is_ro;
 }
 
 int
 box_wait_ro(bool ro, double timeout)
 {
 	double deadline = ev_monotonic_now(loop()) + timeout;
-	while (box_is_ro() != ro) {
+	while (!box_is_writable() != ro) {
 		if (fiber_cond_wait_deadline(&ro_cond, deadline) != 0)
 			return -1;
 		if (fiber_is_cancelled()) {
