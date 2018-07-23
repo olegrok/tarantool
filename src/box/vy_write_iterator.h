@@ -220,6 +220,24 @@ struct vy_mem;
 struct vy_slice;
 
 /**
+ * Callback invoked by the write iterator for tuples that were
+ * overwritten or deleted without generating DELETE statement
+ * for secondary indexes.
+ *
+ * @param old_stmt Overwritten tuple.
+ * @param new_stmt Statement that overwrote @old_stmt.
+ * @param ctx Callback context.
+ *
+ * @retval  0 Success.
+ * @retval -1 Error.
+ *
+ * @sa VY_STMT_DEFERRED_DELETE.
+ */
+typedef int
+(*vy_deferred_delete_f)(struct tuple *old_stmt,
+			struct tuple *new_stmt, void *ctx);
+
+/**
  * Open an empty write iterator. To add sources to the iterator
  * use vy_write_iterator_add_* functions.
  * @param cmp_def - key definition for tuple compare.
@@ -227,13 +245,16 @@ struct vy_slice;
  * @param LSM tree is_primary - set if this iterator is for a primary index.
  * @param is_last_level - there is no older level than the one we're writing to.
  * @param read_views - Opened read views.
+ * @param deferred_delete_cb - Callback for generating deferred DELETEs.
+ * @param deferred_delete_ctx - Context passed to @deferred_delete_cb.
  * @return the iterator or NULL on error (diag is set).
  */
 struct vy_stmt_stream *
 vy_write_iterator_new(const struct key_def *cmp_def,
-		      struct tuple_format *format,
-		      bool is_primary, bool is_last_level,
-		      struct rlist *read_views);
+		      struct tuple_format *format, bool is_primary,
+		      bool is_last_level, struct rlist *read_views,
+		      vy_deferred_delete_f deferred_delete_cb,
+		      void *deferred_delete_ctx);
 
 /**
  * Add a mem as a source to the iterator.
