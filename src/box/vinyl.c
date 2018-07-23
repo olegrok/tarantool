@@ -4266,6 +4266,21 @@ vinyl_space_build_index(struct space *src_space, struct index *new_index,
 
 /* }}} Index build */
 
+/* {{{ Deferred DELETE handling */
+
+static void
+vy_deferred_delete_on_replace(struct trigger *trigger, void *event)
+{
+	(void)trigger;
+	(void)event;
+}
+
+struct trigger on_replace_vinyl_deferred_delete = {
+	RLIST_LINK_INITIALIZER, vy_deferred_delete_on_replace, NULL, NULL
+};
+
+/* }}} Deferred DELETE handling */
+
 static const struct engine_vtab vinyl_engine_vtab = {
 	/* .shutdown = */ vinyl_engine_shutdown,
 	/* .create_space = */ vinyl_engine_create_space,

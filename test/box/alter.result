@@ -107,7 +107,7 @@ space = box.space[t[1]]
 ...
 space.id
 ---
-- 341
+- 451
 ...
 space.field_count
 ---
@@ -152,7 +152,7 @@ space_deleted
 ...
 space:replace{0}
 ---
-- error: Space '341' does not exist
+- error: Space '451' does not exist
 ...
 _index:insert{_space.id, 0, 'primary', 'tree', 1, 1, 0, 'unsigned'}
 ---

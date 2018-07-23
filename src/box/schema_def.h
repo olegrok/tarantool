@@ -102,6 +102,8 @@ enum {
 	BOX_TRUNCATE_ID = 330,
 	/** Space id of _space_sequence. */
 	BOX_SPACE_SEQUENCE_ID = 340,
+	/** Space if of _vinyl_deferred_delete. */
+	BOX_VINYL_DEFERRED_DELETE_ID = 450,
 	/** End of the reserved range of system spaces. */
 	BOX_SYSTEM_ID_MAX = 511,
 	BOX_ID_NIL = 2147483647

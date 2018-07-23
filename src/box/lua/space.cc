@@ -554,6 +554,8 @@ box_lua_space_init(struct lua_State *L)
 	lua_setfield(L, -2, "VSEQUENCE_ID");
 	lua_pushnumber(L, BOX_SPACE_SEQUENCE_ID);
 	lua_setfield(L, -2, "SPACE_SEQUENCE_ID");
+	lua_pushnumber(L, BOX_VINYL_DEFERRED_DELETE_ID);
+	lua_setfield(L, -2, "VINYL_DEFERRED_DELETE_ID");
 	lua_pushnumber(L, BOX_SYSTEM_ID_MIN);
 	lua_setfield(L, -2, "SYSTEM_ID_MIN");
 	lua_pushnumber(L, BOX_SYSTEM_ID_MAX);
