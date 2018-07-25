@@ -412,7 +412,6 @@ vy_stmt_new_surrogate_delete_raw(struct tuple_format *format,
 
 	const char *src_pos = src_data;
 	uint32_t src_count = mp_decode_array(&src_pos);
-	assert(src_count >= format->min_field_count);
 	uint32_t field_count;
 	if (src_count < format->index_field_count) {
 		field_count = src_count;
