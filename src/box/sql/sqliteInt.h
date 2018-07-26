@@ -2009,8 +2009,6 @@ struct Index {
 	Table *pTable;
 	/** The next index associated with the same table. */
 	Index *pNext;
-	/** WHERE clause for partial indices. */
-	Expr *pPartIdxWhere;
 	/**
 	 * Conflict resolution algorithm to employ whenever an
 	 * attempt is made to insert a non-unique element in
@@ -3591,7 +3589,6 @@ void sqlite3SrcListDelete(sqlite3 *, SrcList *);
  * @param on_error One of ON_CONFLICT_ACTION_ABORT, _IGNORE,
  *        _REPLACE, or _NONE.
  * @param start The CREATE token that begins this statement.
- * @param where WHERE clause for partial indices.
  * @param sort_order Sort order of primary key when pList==NULL.
  * @param if_not_exist Omit error if index already exists.
  * @param idx_type The index type.
@@ -3600,8 +3597,8 @@ void
 sql_create_index(struct Parse *parse, struct Token *token,
 		 struct SrcList *tbl_name, struct ExprList *col_list,
 		 enum on_conflict_action on_error, struct Token *start,
-		 struct Expr *where, enum sort_order sort_order,
-		 bool if_not_exist, enum sql_index_type idx_type);
+		 enum sort_order sort_order, bool if_not_exist,
+		 enum sql_index_type idx_type);
 
 /**
  * This routine will drop an existing named index.  This routine

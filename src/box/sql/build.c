@@ -210,7 +210,6 @@ sqlite3LocateIndex(sqlite3 * db, const char *zName, const char *zTable)
 static void
 freeIndex(sqlite3 * db, Index * p)
 {
-	sql_expr_delete(db, p->pPartIdxWhere, false);
 	if (p->def != NULL)
 		index_def_delete(p->def);
 	sqlite3DbFree(db, p);
@@ -927,9 +926,8 @@ sqlite3AddPrimaryKey(Parse * pParse,	/* Parsing context */
 							     &token, 0));
 		if (list == NULL)
 			goto primary_key_exit;
-		sql_create_index(pParse, 0, 0, list, onError, 0, 0,
-				 SORT_ORDER_ASC, false,
-				 SQL_INDEX_TYPE_CONSTRAINT_PK);
+		sql_create_index(pParse, 0, 0, list, onError, 0, SORT_ORDER_ASC,
+				 false, SQL_INDEX_TYPE_CONSTRAINT_PK);
 		if (db->mallocFailed)
 			goto primary_key_exit;
 	} else if (autoInc) {
@@ -937,9 +935,8 @@ sqlite3AddPrimaryKey(Parse * pParse,	/* Parsing context */
 				"INTEGER PRIMARY KEY or INT PRIMARY KEY");
 		goto primary_key_exit;
 	} else {
-		sql_create_index(pParse, 0, 0, pList, onError, 0,
-				 0, sortOrder, false,
-				 SQL_INDEX_TYPE_CONSTRAINT_PK);
+		sql_create_index(pParse, 0, 0, pList, onError, 0, sortOrder,
+				 false, SQL_INDEX_TYPE_CONSTRAINT_PK);
 		pList = 0;
 		if (pParse->nErr > 0)
 			goto primary_key_exit;
@@ -2756,8 +2753,8 @@ void
 sql_create_index(struct Parse *parse, struct Token *token,
 		 struct SrcList *tbl_name, struct ExprList *col_list,
 		 enum on_conflict_action on_error, struct Token *start,
-		 struct Expr *where, enum sort_order sort_order,
-		 bool if_not_exist, enum sql_index_type idx_type) {
+		 enum sort_order sort_order, bool if_not_exist,
+		 enum sql_index_type idx_type) {
 	/* The index to be created. */
 	struct Index *index = NULL;
 	/* Name of the index. */
@@ -2917,13 +2914,6 @@ sql_create_index(struct Parse *parse, struct Token *token,
 	index->pTable = table;
 	index->onError = (u8) on_error;
 	index->index_type = idx_type;
-	/* Tarantool have access to each column by any index. */
-	if (where != NULL) {
-		sql_resolve_self_reference(parse, table, NC_PartIdx, where,
-					   NULL);
-		index->pPartIdxWhere = where;
-		where = NULL;
-	}
 
 	/*
 	 * TODO: Issue a warning if two or more columns of the
@@ -3132,7 +3122,6 @@ sql_create_index(struct Parse *parse, struct Token *token,
  exit_create_index:
 	if (index != NULL)
 		freeIndex(db, index);
-	sql_expr_delete(db, where, false);
 	sql_expr_list_delete(db, col_list);
 	sqlite3SrcListDelete(db, tbl_name);
 	sqlite3DbFree(db, name);

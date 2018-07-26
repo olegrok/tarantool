@@ -587,22 +587,11 @@ sql_generate_index_key(struct Parse *parse, struct Index *index, int cursor,
 {
 	struct Vdbe *v = parse->pVdbe;
 
-	if (part_idx_label != NULL) {
-		if (index->pPartIdxWhere != NULL) {
-			*part_idx_label = sqlite3VdbeMakeLabel(v);
-			parse->iSelfTab = cursor;
-			sqlite3ExprCachePush(parse);
-			sqlite3ExprIfFalseDup(parse, index->pPartIdxWhere,
-					      *part_idx_label,
-					      SQLITE_JUMPIFNULL);
-		} else {
-			*part_idx_label = 0;
-		}
-	}
+	if (part_idx_label != NULL)
+		*part_idx_label = 0;
 	int col_cnt = index->def->key_def->part_count;
 	int reg_base = sqlite3GetTempRange(parse, col_cnt);
-	if (prev != NULL && (reg_base != reg_prev ||
-			     prev->pPartIdxWhere != NULL))
+	if (prev != NULL && reg_base != reg_prev)
 		prev = NULL;
 	for (int j = 0; j < col_cnt; j++) {
 		if (prev != NULL && prev->def->key_def->parts[j].fieldno ==
