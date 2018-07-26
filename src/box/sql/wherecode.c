@@ -725,7 +725,8 @@ codeAllEqualityTerms(Parse * pParse,	/* Parsing context */
 	char *zAff;
 	if (pIdx != NULL) {
 		zAff = sqlite3DbStrDup(pParse->db,
-				       sqlite3IndexAffinityStr(pParse->db, pIdx));
+				       sql_index_affinity_str(pParse->db,
+							      pIdx->def));
 	} else {
 		zAff = sql_index_affinity_str(pParse->db, idx_def);
 	}

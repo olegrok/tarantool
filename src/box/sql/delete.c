@@ -352,7 +352,8 @@ sql_table_delete_from(struct Parse *parse, struct SrcList *tab_list,
 			key_len = 0;
 			struct Index *pk = sqlite3PrimaryKeyIndex(table);
 			const char *zAff = is_view ? NULL :
-					  sqlite3IndexAffinityStr(parse->db, pk);
+					  sql_index_affinity_str(parse->db,
+								 pk->def);
 			sqlite3VdbeAddOp4(v, OP_MakeRecord, reg_pk, pk_len,
 					  reg_key, zAff, pk_len);
 			/* Set flag to save memory allocating one

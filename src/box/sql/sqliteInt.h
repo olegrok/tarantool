@@ -2007,8 +2007,6 @@ enum sql_index_type {
 struct Index {
 	/** The SQL table being indexed. */
 	Table *pTable;
-	/** String defining the affinity of each column. */
-	char *zColAff;
 	/** The next index associated with the same table. */
 	Index *pNext;
 	/** WHERE clause for partial indices. */
@@ -4281,8 +4279,6 @@ int sqlite3VarintLen(u64 v);
 #define getVarint    sqlite3GetVarint
 #define putVarint    sqlite3PutVarint
 
-const char *sqlite3IndexAffinityStr(sqlite3 *, Index *);
-
 /**
  * Return a pointer to the column affinity string associated with
  * given index. A column affinity string has one character for
@@ -4611,7 +4607,17 @@ void sqlite3Stat4ProbeFree(UnpackedRecord *);
 int
 sql_stat4_column(struct sqlite3 *db, const char *record, uint32_t col_num,
 		 sqlite3_value **res);
-char sqlite3IndexColumnAffinity(sqlite3 *, Index *, int);
+
+/**
+ * Return the affinity for a single column of an index.
+ *
+ * @param idx Index to be investigated.
+ * @param partno Affinity of this part to be returned.
+ *
+ * @retval Affinity of @partno index part.
+ */
+enum affinity_type
+sql_index_part_affinity(struct index_def *idx, uint32_t partno);
 
 /*
  * The interface to the LEMON-generated parser
