@@ -170,6 +170,11 @@ struct vy_mem {
 	int64_t min_lsn;
 	int64_t max_lsn;
 	/**
+	 * Max LSN of a WAL statement that generated a deferred
+	 * DELETE inserted into this tree.
+	 */
+	int64_t max_deferred_delete_wal_lsn;
+	/**
 	 * Key definition for this index, extended with primary
 	 * key parts.
 	 */

@@ -110,6 +110,7 @@ vy_mem_new(struct vy_mem_env *env, int64_t generation,
 	index->env = env;
 	index->min_lsn = INT64_MAX;
 	index->max_lsn = -1;
+	index->max_deferred_delete_wal_lsn = -1;
 	index->cmp_def = cmp_def;
 	index->generation = generation;
 	index->space_cache_version = space_cache_version;

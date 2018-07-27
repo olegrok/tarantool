@@ -65,6 +65,7 @@
 #include "engine.h"
 #include "space.h"
 #include "index.h"
+#include "schema.h"
 #include "xstream.h"
 #include "info.h"
 #include "column_mask.h"
@@ -1270,25 +1271,43 @@ vy_get_by_secondary_tuple(struct vy_lsm *lsm, struct vy_tx *tx,
 			  struct tuple *tuple, struct tuple **result)
 {
 	assert(lsm->index_id > 0);
-	/*
-	 * No need in vy_tx_track() as the tuple must already be
-	 * tracked in the secondary index LSM tree.
-	 */
+
 	if (vy_point_lookup(lsm->pk, tx, rv, tuple, result) != 0)
 		return -1;
 
-	if (*result == NULL) {
+	if (*result == NULL ||
+	    vy_tuple_compare(*result, tuple, lsm->key_def) != 0) {
 		/*
-		 * All indexes of a space must be consistent, i.e.
-		 * if a tuple is present in one index, it must be
-		 * present in all other indexes as well, so we can
-		 * get here only if there's a bug somewhere in vinyl.
-		 * Don't abort as core dump won't really help us in
-		 * this case. Just warn the user and proceed to the
-		 * next tuple.
+		 * If a tuple read from a secondary index doesn't
+		 * match the tuple corresponding to it in the
+		 * primary index, it must have been overwritten or
+		 * deleted, but the DELETE statement hasn't been
+		 * propagated to the secondary index yet. In this
+		 * case silently skip this tuple.
 		 */
-		say_warn("%s: key %s missing in primary index",
-			 vy_lsm_name(lsm), vy_stmt_str(tuple));
+		if (*result != NULL) {
+			tuple_unref(*result);
+			*result = NULL;
+		}
+		/*
+		 * Invalidate the cache entry so that we won't read
+		 * the overwritten tuple again from the cache.
+		 */
+		vy_cache_on_write(&lsm->cache, tuple, NULL);
+		return 0;
+	}
+
+	/*
+	 * Even though the tuple is tracked in the secondary index
+	 * read set, we still must track the full tuple read from
+	 * the primary index, otherwise the transaction won't be
+	 * aborted if this tuple is overwritten or deleted, because
+	 * the DELETE statement is not written to secondary indexes
+	 * immediately.
+	 */
+	if (tx != NULL && vy_tx_track_point(tx, lsm->pk, *result) != 0) {
+		tuple_unref(*result);
+		return -1;
 	}
 
 	if ((*rv)->vlsn == INT64_MAX)
@@ -1601,7 +1620,6 @@ vy_delete(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 	struct vy_lsm *lsm = vy_lsm_find_unique(space, request->index_id);
 	if (lsm == NULL)
 		return -1;
-	bool has_secondary = space->index_count > 1;
 	const char *key = request->key;
 	uint32_t part_count = mp_decode_array(&key);
 	if (vy_unique_key_validate(lsm, key, part_count))
@@ -1611,12 +1629,9 @@ vy_delete(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 	 * before deletion.
 	 * - if the space has on_replace triggers and need to pass
 	 *   to them the old tuple.
-	 *
-	 * - if the space has one or more secondary indexes, then
-	 *   we need to extract secondary keys from the old tuple
-	 *   and pass them to indexes for deletion.
+	 * - if deletion is done by a secondary index.
 	 */
-	if (has_secondary || !rlist_empty(&space->on_replace)) {
+	if (lsm->index_id > 0 || !rlist_empty(&space->on_replace)) {
 		if (vy_get_by_raw_key(lsm, tx, vy_tx_read_view(tx),
 				      key, part_count, &stmt->old_tuple) != 0)
 			return -1;
@@ -1625,8 +1640,7 @@ vy_delete(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 	}
 	int rc = 0;
 	struct tuple *delete;
-	if (has_secondary) {
-		assert(stmt->old_tuple != NULL);
+	if (stmt->old_tuple != NULL) {
 		delete = vy_stmt_new_surrogate_delete(pk->mem_format,
 						      stmt->old_tuple);
 		if (delete == NULL)
@@ -1639,12 +1653,14 @@ vy_delete(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 			if (rc != 0)
 				break;
 		}
-	} else { /* Primary is the single index in the space. */
+	} else {
 		assert(lsm->index_id == 0);
 		delete = vy_stmt_new_surrogate_delete_from_key(request->key,
 						pk->key_def, pk->mem_format);
 		if (delete == NULL)
 			return -1;
+		if (space->index_count > 1)
+			vy_stmt_set_flags(delete, VY_STMT_DEFERRED_DELETE);
 		rc = vy_tx_set(tx, pk, delete);
 	}
 	tuple_unref(delete);
@@ -2163,11 +2179,9 @@ vy_replace(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 	/*
 	 * Get the overwritten tuple from the primary index if
 	 * the space has on_replace triggers, in which case we
-	 * need to pass the old tuple to trigger callbacks, or
-	 * if the space has secondary indexes and so we need
-	 * the old tuple to delete it from them.
+	 * need to pass the old tuple to trigger callbacks.
 	 */
-	if (space->index_count > 1 || !rlist_empty(&space->on_replace)) {
+	if (!rlist_empty(&space->on_replace)) {
 		if (vy_get(pk, tx, vy_tx_read_view(tx),
 			   stmt->new_tuple, &stmt->old_tuple) != 0)
 			return -1;
@@ -2178,6 +2192,8 @@ vy_replace(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 			 */
 			vy_stmt_set_type(stmt->new_tuple, IPROTO_INSERT);
 		}
+	} else if (space->index_count > 1) {
+		vy_stmt_set_flags(stmt->new_tuple, VY_STMT_DEFERRED_DELETE);
 	}
 	/*
 	 * Replace in the primary index without explicit deletion
@@ -4268,11 +4284,164 @@ vinyl_space_build_index(struct space *src_space, struct index *new_index,
 
 /* {{{ Deferred DELETE handling */
 
+/**
+ * Callback invoked after a deferred DELETE statement has been
+ * committed to _vinyl_deferred_delete system space.
+ */
+static void
+vy_deferred_delete_on_commit(struct trigger *trigger, void *event)
+{
+	struct txn *txn = event;
+	struct vy_mem *mem = trigger->data;
+	assert(mem->max_deferred_delete_wal_lsn <= txn->signature);
+	mem->max_deferred_delete_wal_lsn = txn->signature;
+	vy_mem_unpin(mem);
+}
+
+/**
+ * Callback invoked when a deferred DELETE statement is written
+ * to _vinyl_deferred_delete system space. It extracts the
+ * deleted tuple, its LSN, and the target space id from the
+ * system space row, then generates a deferred DELETE statement
+ * and inserts it into secondary indexes of the target space.
+ *
+ * Note, this callback is also invoked during local WAL recovery
+ * to restore deferred DELETE statements that haven't been dumped
+ * to disk. To skip deferred DELETEs that have been dumped, we
+ * use the same technique we employ for normal WAL statements,
+ * i.e. we filter them by LSN, see vy_is_committed_one(). To do
+ * that, we need to account the LSN of a WAL row that generated
+ * a deferred DELETE to vy_lsm::dump_lsn, so we install an
+ * on_commit trigger that propagates the LSN of the WAL row to
+ * vy_mem::max_deferred_delete_wal_lsn, which in turn will
+ * contribute to vy_lsm::dump_lsn when the in-memory tree is
+ * dumped, see vy_task_dump_new().
+ *
+ * This implies that we don't yield between statements of the
+ * same transaction, because if we did, two deferred DELETEs with
+ * the same WAL LSN could land in different in-memory trees: if
+ * one of the trees got dumped while the other didn't, we would
+ * mistakenly skip both statements on recovery.
+ */
 static void
 vy_deferred_delete_on_replace(struct trigger *trigger, void *event)
 {
 	(void)trigger;
-	(void)event;
+
+	struct txn *txn = event;
+	struct txn_stmt *stmt = txn_current_stmt(txn);
+	bool is_first_statement = txn_is_first_statement(txn);
+
+	if (stmt->new_tuple == NULL)
+		return;
+	/*
+	 * Extract space id, LSN of the deferred DELETE statement,
+	 * and the deleted tuple from the system space row.
+	 */
+	uint32_t space_id;
+	if (tuple_field_u32(stmt->new_tuple, 0, &space_id) != 0)
+		diag_raise();
+	int64_t lsn;
+	if (tuple_field_i64(stmt->new_tuple, 1, &lsn) != 0)
+		diag_raise();
+	const char *delete_data = tuple_field(stmt->new_tuple, 2);
+	if (delete_data == NULL) {
+		diag_set(ClientError, ER_NO_SUCH_FIELD, 2);
+		diag_raise();
+	}
+	const char *delete_data_end = delete_data;
+	mp_next(&delete_data_end);
+
+	/* Look up the space. */
+	struct space *space = space_cache_find(space_id);
+	if (space == NULL)
+		diag_raise();
+	if (space->index_count <= 1)
+		return;
+	/*
+	 * Wait for memory quota if necessary before starting to
+	 * process the batch (we can't yield between statements).
+	 */
+	struct vy_env *env = vy_env(space->engine);
+	if (is_first_statement)
+		vy_quota_wait(&env->quota);
+
+	/* Create the deferred DELETE statement. */
+	struct vy_lsm *pk = vy_lsm(space->index[0]);
+	struct tuple *delete = vy_stmt_new_surrogate_delete_raw(pk->mem_format,
+						delete_data, delete_data_end);
+	if (delete == NULL)
+		diag_raise();
+	vy_stmt_set_lsn(delete, lsn);
+	/*
+	 * A deferred DELETE may be generated after new statements
+	 * were committed for the deleted key while the read iterator
+	 * assumes that newer sources always store newer statements.
+	 * Mark deferred DELETEs with the VY_STMT_SKIP_READ flag so
+	 * as not to break the read iterator assumptions.
+	 */
+	vy_stmt_set_flags(delete, VY_STMT_SKIP_READ);
+
+	/* Insert the deferred DELETE into secondary indexes. */
+	int rc = 0;
+	size_t mem_used_before = lsregion_used(&env->mem_env.allocator);
+	const struct tuple *region_stmt = NULL;
+	for (uint32_t i = 1; i < space->index_count; i++) {
+		struct vy_lsm *lsm = vy_lsm(space->index[i]);
+		if (vy_is_committed_one(env, lsm))
+			continue;
+		/*
+		 * As usual, rotate the active in-memory index if
+		 * schema was changed or dump was triggered. Do it
+		 * only if processing the first statement, because
+		 * dump may be triggered by one of the statements
+		 * of this transaction (see vy_quota_force_use()
+		 * below), in which case we must not do rotation
+		 * as we want all statements to land in the same
+		 * in-memory index. This is safe, as long as we
+		 * don't yield between statements.
+		 */
+		struct vy_mem *mem = lsm->mem;
+		if (is_first_statement &&
+		    (mem->space_cache_version != space_cache_version ||
+		     mem->generation != *lsm->env->p_generation)) {
+			rc = vy_lsm_rotate_mem(lsm);
+			if (rc != 0)
+				break;
+			mem = lsm->mem;
+		}
+		rc = vy_lsm_set(lsm, mem, delete, &region_stmt);
+		if (rc != 0)
+			break;
+		vy_lsm_commit_stmt(lsm, mem, region_stmt);
+
+		if (!is_first_statement)
+			continue;
+		/*
+		 * If this is the first statement of this
+		 * transaction, install on_commit trigger
+		 * which will propagate the WAL row LSN to
+		 * the LSM tree.
+		 */
+		struct trigger *on_commit = region_alloc(&fiber()->gc,
+							 sizeof(*on_commit));
+		if (on_commit == NULL) {
+			diag_set(OutOfMemory, sizeof(*on_commit),
+				 "region", "struct trigger");
+			rc = -1;
+			break;
+		}
+		vy_mem_pin(mem);
+		trigger_create(on_commit, vy_deferred_delete_on_commit, mem, NULL);
+		txn_on_commit(txn, on_commit);
+	}
+	size_t mem_used_after = lsregion_used(&env->mem_env.allocator);
+	assert(mem_used_after >= mem_used_before);
+	vy_quota_force_use(&env->quota, mem_used_after - mem_used_before);
+
+	tuple_unref(delete);
+	if (rc != 0)
+		diag_raise();
 }
 
 struct trigger on_replace_vinyl_deferred_delete = {
