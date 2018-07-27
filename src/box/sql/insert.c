@@ -1139,7 +1139,7 @@ sqlite3GenerateConstraintChecks(Parse * pParse,		/* The parser context */
 
 		bool table_ipk_autoinc = false;
 		int reg_pk = -1;
-		if (IsPrimaryKeyIndex(pIdx)) {
+		if (sql_index_is_primary(pIdx)) {
 			/* If PK is marked as INTEGER, use it as strict type,
 			 * not as affinity. Emit code for type checking */
 			if (part_count == 1) {
@@ -1177,7 +1177,7 @@ sqlite3GenerateConstraintChecks(Parse * pParse,		/* The parser context */
 			sqlite3VdbeResolveLabel(v, addrUniqueOk);
 			continue;
 		}
-		if (!IsUniqueIndex(pIdx)) {
+		if (!sql_index_is_unique(pIdx)) {
 			sqlite3VdbeResolveLabel(v, addrUniqueOk);
 			continue;
 		}
@@ -1284,7 +1284,7 @@ sqlite3GenerateConstraintChecks(Parse * pParse,		/* The parser context */
 				int addrJump = sqlite3VdbeCurrentAddr(v) +
 					       pk_part_count;
 				int op = OP_Ne;
-				int regCmp = IsPrimaryKeyIndex(pIdx) ?
+				int regCmp = sql_index_is_primary(pIdx) ?
 					     regIdx : regR;
 				struct key_part *part =
 					pPk->def->key_def->parts;
@@ -1463,9 +1463,9 @@ sqlite3OpenTableAndIndices(Parse * pParse,	/* Parsing context */
 		 * iteration and don't open new index cursor
 		 */
 
-		if (isUpdate || 			/* Condition 1 */
-		    IsPrimaryKeyIndex(pIdx) ||		/* Condition 2 */
+		if (isUpdate ||
 		    ! rlist_empty(&space->parent_fkey) ||
+		    sql_index_is_primary(pIdx) ||
 		    /* Condition 4 */
 		    (pIdx->def->opts.is_unique &&
 		     pIdx->onError != ON_CONFLICT_ACTION_DEFAULT &&
@@ -1475,7 +1475,7 @@ sqlite3OpenTableAndIndices(Parse * pParse,	/* Parsing context */
 		     overrideError == ON_CONFLICT_ACTION_ROLLBACK) {
 
 			int iIdxCur = iBase++;
-			if (IsPrimaryKeyIndex(pIdx)) {
+			if (sql_index_is_primary(pIdx)) {
 				if (piDataCur)
 					*piDataCur = iIdxCur;
 				p5 = 0;
@@ -1792,7 +1792,7 @@ xferOptimization(Parse * pParse,	/* Parser context */
 		VdbeCoverage(v);
 		sqlite3VdbeAddOp2(v, OP_RowData, iSrc, regData);
 		sqlite3VdbeAddOp2(v, OP_IdxInsert, iDest, regData);
-		if (pDestIdx->index_type == SQL_INDEX_TYPE_CONSTRAINT_PK)
+		if (sql_index_is_primary(pDestIdx))
 			sqlite3VdbeChangeP5(v, OPFLAG_NCHANGE);
 		sqlite3VdbeAddOp2(v, OP_Next, iSrc, addr1 + 1);
 		VdbeCoverage(v);

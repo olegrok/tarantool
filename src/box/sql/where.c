@@ -3008,7 +3008,7 @@ whereLoopAddBtree(WhereLoopBuilder * pBuilder,	/* WHERE clause information */
 			 * of secondary indexes, because secondary indexes
 			 * are not really store any data (only pointers to tuples).
 			 */
-			int notPkPenalty = IsPrimaryKeyIndex(pProbe) ? 0 : 4;
+			int notPkPenalty = sql_index_is_primary(pProbe) ? 0 : 4;
 			pNew->rRun = rSize + 16 + notPkPenalty;
 			whereLoopOutputAdjust(pWC, pNew, rSize);
 			rc = whereLoopInsert(pBuilder, pNew);
@@ -4683,7 +4683,7 @@ sqlite3WhereBegin(Parse * pParse,	/* The parser context */
 			 */
 			if (idx_def == NULL && pIx == NULL)
 				continue;
-			bool is_primary = (pIx != NULL && IsPrimaryKeyIndex(pIx)) ||
+			bool is_primary = (pIx != NULL && sql_index_is_primary(pIx)) ||
 					  (idx_def != NULL && (idx_def->iid == 0));
 			if (is_primary
 			    && (wctrlFlags & WHERE_OR_SUBCLAUSE) != 0) {
