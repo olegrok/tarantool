@@ -96,6 +96,7 @@ static char *
 tuple_extract_key_slowpath(const struct tuple *tuple,
 			   const struct key_def *key_def, uint32_t *key_size)
 {
+	assert(!is_flat == key_def->has_json_paths);
 	assert(!has_optional_parts || key_def->is_nullable);
 	assert(has_optional_parts == key_def->has_optional_parts);
 	assert(contains_sequential_parts ==

@@ -333,6 +333,7 @@ template <bool has_optional_parts, bool is_flat>
 uint32_t
 tuple_hash_slowpath(const struct tuple *tuple, const struct key_def *key_def)
 {
+	assert(!is_flat == key_def->has_json_paths);
 	assert(has_optional_parts == key_def->has_optional_parts);
 	uint32_t h = HASH_SEED;
 	uint32_t carry = 0;

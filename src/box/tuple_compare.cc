@@ -462,6 +462,7 @@ static inline int
 tuple_compare_slowpath(const struct tuple *tuple_a, const struct tuple *tuple_b,
 		       const struct key_def *key_def)
 {
+	assert(!is_flat == key_def->has_json_paths);
 	assert(!has_optional_parts || is_nullable);
 	assert(is_nullable == key_def->is_nullable);
 	assert(has_optional_parts == key_def->has_optional_parts);
@@ -601,6 +602,7 @@ tuple_compare_with_key_slowpath(const struct tuple *tuple, const char *key,
 				uint32_t part_count,
 				const struct key_def *key_def)
 {
+	assert(!is_flat == key_def->has_json_paths);
 	assert(!has_optional_parts || is_nullable);
 	assert(is_nullable == key_def->is_nullable);
 	assert(has_optional_parts == key_def->has_optional_parts);
