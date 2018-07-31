@@ -891,6 +891,277 @@ t["{"]
 s:drop()
 ---
 ...
+--
+-- gh-1012: Indexes for JSON-defined paths.
+--
+s = box.schema.space.create('withdata', {engine = engine})
+---
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3].FIO["fname"]'}, {3, 'str', path = '[3]["FIO"].fname'}}})
+---
+- error: 'Can''t create or modify index ''test1'' in space ''withdata'': same key
+    part is indexed twice'
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = 666}, {3, 'str', path = '[3]["FIO"]["fname"]'}}})
+---
+- error: 'Wrong index options (field 2): ''path'' must be string'
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = 'field.FIO.fname'}}})
+---
+- error: 'Wrong index options (field 2): invalid JSON path: first part should be defined
+    as array index'
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'map', path = '[3].FIO'}}})
+---
+- error: 'Can''t create or modify index ''test1'' in space ''withdata'': field type
+    ''map'' is not supported'
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'array', path = '[3][1]'}}})
+---
+- error: 'Can''t create or modify index ''test1'' in space ''withdata'': field type
+    ''array'' is not supported'
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3].FIO'}, {3, 'str', path = '[3]["FIO"].fname'}}})
+---
+- error: Field 3 has type 'map' in one index, but type 'string' in another
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3][1].sname'}, {3, 'str', path = '[3]["FIO"].fname'}}})
+---
+- error: Field 3 has type 'map' in one index, but type 'array' in another
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[2].FIO.fname'}}})
+---
+- error: 'Wrong index options (field 2): invalid JSON path: first part refers to invalid
+    field'
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3].FIO....fname'}}})
+---
+- error: 'Wrong index options (field 3): invalid JSON path ''[3].FIO....fname'': path
+    has invalid structure (error at position 9)'
+...
+idx = s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3]["FIO"]["fname"]'}, {3, 'str', path = '[3]["FIO"]["sname"]'}}})
+---
+...
+assert(idx ~= nil)
+---
+- true
+...
+s:insert{7, 7, {town = 'London', FIO = 666}, 4, 5}
+---
+- error: Tuple doesn't math document structure defined as index
+...
+s:insert{7, 7, {town = 'London', FIO = {fname = 666, sname = 'Bond'}}, 4, 5}
+---
+- error: 'Supplied key type of part 2 does not match index part type: expected string'
+...
+s:insert{7, 7, {town = 'London', FIO = {fname = "James"}}, 4, 5}
+---
+- error: Tuple doesn't math document structure defined as index
+...
+s:insert{7, 7, {town = 'London', FIO = {fname = 'James', sname = 'Bond'}}, 4, 5}
+---
+- [7, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+s:insert{7, 7, {town = 'London', FIO = {fname = 'James', sname = 'Bond'}}, 4, 5}
+---
+- error: Duplicate key exists in unique index 'test1' in space 'withdata'
+...
+s:insert{7, 7, {town = 'London', FIO = {fname = 'James', sname = 'Bond', data = "extra"}}, 4, 5}
+---
+- error: Duplicate key exists in unique index 'test1' in space 'withdata'
+...
+s:insert{7, 7, {town = 'Moscow', FIO = {fname = 'Max', sname = 'Isaev', data = "extra"}}, 4, 5}
+---
+- [7, 7, {'town': 'Moscow', 'FIO': {'fname': 'Max', 'data': 'extra', 'sname': 'Isaev'}},
+  4, 5]
+...
+idx:select()
+---
+- - [7, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+  - [7, 7, {'town': 'Moscow', 'FIO': {'fname': 'Max', 'data': 'extra', 'sname': 'Isaev'}},
+    4, 5]
+...
+idx:min()
+---
+- [7, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+idx:max()
+---
+- [7, 7, {'town': 'Moscow', 'FIO': {'fname': 'Max', 'data': 'extra', 'sname': 'Isaev'}},
+  4, 5]
+...
+s:drop()
+---
+...
+s = box.schema.create_space('withdata', {engine = engine})
+---
+...
+parts = {}
+---
+...
+parts[1] = {1, 'unsigned', path='[1][2]'}
+---
+...
+pk = s:create_index('pk', {parts = parts})
+---
+...
+s:insert{{1, 2}, 3}
+---
+- [[1, 2], 3]
+...
+s:upsert({{box.null, 2}}, {{'+', 2, 5}})
+---
+...
+s:get(2)
+---
+- [[1, 2], 8]
+...
+s:drop()
+---
+...
+-- Create index on space with data
+s = box.schema.space.create('withdata', {engine = engine})
+---
+...
+pk = s:create_index('primary', { type = 'tree' })
+---
+...
+s:insert{1, 7, {town = 'London', FIO = 1234}, 4, 5}
+---
+- [1, 7, {'town': 'London', 'FIO': 1234}, 4, 5]
+...
+s:insert{2, 7, {town = 'London', FIO = {fname = 'James', sname = 'Bond'}}, 4, 5}
+---
+- [2, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+s:insert{3, 7, {town = 'London', FIO = {fname = 'James', sname = 'Bond'}}, 4, 5}
+---
+- [3, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3]["FIO"]["fname"]'}, {3, 'str', path = '[3]["FIO"]["sname"]'}}})
+---
+- error: Tuple doesn't math document structure defined as index
+...
+_ = s:delete(1)
+---
+...
+s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3]["FIO"]["fname"]'}, {3, 'str', path = '[3]["FIO"]["sname"]'}}})
+---
+- error: Duplicate key exists in unique index 'test1' in space 'withdata'
+...
+_ = s:delete(2)
+---
+...
+idx = s:create_index('test1', {parts = {{2, 'number'}, {3, 'str', path = '[3]["FIO"]["fname"]'}, {3, 'str', path = '[3]["FIO"]["sname"]'}}})
+---
+...
+assert(idx ~= nil)
+---
+- true
+...
+idx:select()
+---
+- - [3, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+idx:min()
+---
+- [3, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+idx:max()
+---
+- [3, 7, {'town': 'London', 'FIO': {'fname': 'James', 'sname': 'Bond'}}, 4, 5]
+...
+idx:drop()
+---
+...
+s:drop()
+---
+...
+-- Test complex JSON indexes
+s = box.schema.space.create('withdata', {engine = engine})
+---
+...
+parts = {}
+---
+...
+parts[1] = {1, 'str', path='[1][3][2].a'}
+---
+...
+parts[2] = {1, 'unsigned', path = '[1][3][1]'}
+---
+...
+parts[3] = {2, 'str', path = '[2][2].d[1]'}
+---
+...
+pk = s:create_index('primary', { type = 'tree', parts =  parts})
+---
+...
+s:insert{{1, 2, {3, {a = 'str', b = 5}}}, {'c', {d = {'e', 'f'}, e = 'g'}}, 6}
+---
+- [[1, 2, [3, {'a': 'str', 'b': 5}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+s:insert{{1, 2, {3, {a = 'str', b = 1}}}, {'c', {d = {'e', 'f'}, e = 'g'}}, 6}
+---
+- error: Duplicate key exists in unique index 'primary' in space 'withdata'
+...
+parts = {}
+---
+...
+parts[1] = {1, 'unsigned', path='[1][3][2].b' }
+---
+...
+parts[2] = {3, 'unsigned'}
+---
+...
+crosspart_idx = s:create_index('crosspart', { parts =  parts})
+---
+...
+s:insert{{1, 2, {3, {a = 'str2', b = 2}}}, {'c', {d = {'e', 'f'}, e = 'g'}}, 6}
+---
+- [[1, 2, [3, {'a': 'str2', 'b': 2}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+parts = {}
+---
+...
+parts[1] = {1, 'unsigned', path='[1][3][2].b'}
+---
+...
+num_idx = s:create_index('numeric', {parts =  parts})
+---
+...
+s:insert{{1, 2, {3, {a = 'str3', b = 9}}}, {'c', {d = {'e', 'f'}, e = 'g'}}, 6}
+---
+- [[1, 2, [3, {'a': 'str3', 'b': 9}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+num_idx:get(2)
+---
+- [[1, 2, [3, {'a': 'str2', 'b': 2}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+num_idx:select()
+---
+- - [[1, 2, [3, {'a': 'str2', 'b': 2}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+  - [[1, 2, [3, {'a': 'str', 'b': 5}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+  - [[1, 2, [3, {'a': 'str3', 'b': 9}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+num_idx:max()
+---
+- [[1, 2, [3, {'a': 'str3', 'b': 9}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+num_idx:min()
+---
+- [[1, 2, [3, {'a': 'str2', 'b': 2}]], ['c', {'d': ['e', 'f'], 'e': 'g'}], 6]
+...
+assert(crosspart_idx:max() == num_idx:max())
+---
+- true
+...
+assert(crosspart_idx:min() == num_idx:min())
+---
+- true
+...
+s:drop()
+---
+...
 engine = nil
 ---
 ...

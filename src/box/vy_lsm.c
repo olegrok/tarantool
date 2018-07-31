@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <small/mempool.h>
+#include <assoc.h>
 
 #include "diag.h"
 #include "errcode.h"
@@ -158,6 +159,48 @@ vy_lsm_new(struct vy_lsm_env *lsm_env, struct vy_cache_env *cache_env,
 						    NULL);
 		if (lsm->disk_format == NULL)
 			goto fail_format;
+		/*
+		 * Tuple formats should be compatible to make
+		 * epoch-based caching work.
+		 */
+		int32_t min_offset_slot = 0;
+		struct tuple_field *dst_fields = lsm->disk_format->fields;
+		struct mh_strnptr_t *dst_ht = lsm->disk_format->path_hash;
+		struct mh_strnptr_t *src_ht = format->path_hash;
+		struct key_part *part = cmp_def->parts;
+		struct key_part *part_end = part + cmp_def->part_count;
+		for (; part < part_end; part++) {
+			struct tuple_field *dst_field =
+				&dst_fields[part->fieldno];
+			struct tuple_field *src_field;
+			if (dst_field->offset_slot != TUPLE_OFFSET_SLOT_NIL) {
+				src_field = &format->fields[part->fieldno];
+			} else if (dst_fields[part->fieldno].map != NULL) {
+				struct mh_strnptr_node_t *node;
+				node = json_path_hash_get(dst_ht, part->path,
+							  part->path_len,
+							  part->path_hash);
+				assert(node != NULL);
+				dst_field = node->val;
+				assert(dst_field != NULL);
+
+				node = json_path_hash_get(src_ht, part->path,
+							  part->path_len,
+							  part->path_hash);
+				assert(node != NULL);
+				src_field = node->val;
+				assert(dst_field != NULL);
+			} else {
+				continue;
+			}
+			if (src_field->offset_slot == TUPLE_OFFSET_SLOT_NIL)
+				continue;
+			dst_field->offset_slot = src_field->offset_slot;
+			min_offset_slot =
+				MIN(src_field->offset_slot, min_offset_slot);
+		}
+		lsm->disk_format->field_map_size =
+			-min_offset_slot * sizeof(uint32_t);
 	}
 	tuple_format_ref(lsm->disk_format);
 

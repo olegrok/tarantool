@@ -108,6 +108,18 @@ struct tuple_field {
 	bool is_key_part;
 	/** True, if a field can store NULL. */
 	bool is_nullable;
+	/** Tree child records. */
+	union {
+		/** Array of fields. */
+		struct  {
+			struct tuple_field **array;
+			uint32_t array_size;
+		};
+		/** Hashtable: path -> tuple_field. */
+		struct mh_strnptr_t *map;
+		/** Leaf argument for tree-walker routine. */
+		void *arg;
+	};
 };
 
 /**
@@ -166,6 +178,8 @@ struct tuple_format {
 	 * Shared names storage used by all formats of a space.
 	 */
 	struct tuple_dictionary *dict;
+	/** JSON path hash table. */
+	struct mh_strnptr_t *path_hash;
 	/* Formats of the fields */
 	struct tuple_field fields[0];
 };
@@ -395,7 +409,7 @@ tuple_field_raw(const struct tuple_format *format, const char *tuple,
  * @retval     NULL No field with @a name.
  */
 static inline const char *
-tuple_field_raw_by_name(struct tuple_format *format, const char *tuple,
+tuple_field_raw_by_name(const struct tuple_format *format, const char *tuple,
 			const uint32_t *field_map, const char *name,
 			uint32_t name_len, uint32_t name_hash)
 {
@@ -420,10 +434,76 @@ tuple_field_raw_by_name(struct tuple_format *format, const char *tuple,
  * @retval -1 Error in JSON path.
  */
 int
-tuple_field_raw_by_path(struct tuple_format *format, const char *tuple,
+tuple_field_raw_by_path(const struct tuple_format *format, const char *tuple,
                         const uint32_t *field_map, const char *path,
                         uint32_t path_len, uint32_t path_hash,
                         const char **field);
+
+/**
+ * Get @hashtable record by key @path, @path_len.
+ * @param hashtable to lookup,
+ * @param path string.
+ * @param path_len length of @path.
+ * @retval NULL on nothing found.
+ * @retval hashtable record pointer.
+ */
+struct mh_strnptr_node_t *
+json_path_hash_get(struct mh_strnptr_t *hashtable, const char *path,
+		   uint32_t path_len, uint32_t path_hash);
+
+/**
+ * Routine to execute with json_field_tree_exec_routine on JSON
+ * path field tree records.
+ * @param field to use on initialization.
+ * @param idx root field index to emmit correct error.
+ * @param tuple source raw data.
+ * @param offset calculated offset of field that path refers to.
+ * @param ctx callback argument
+ * @retval 0 on success.
+ * @retval -1 on error.
+ */
+typedef int (*json_field_tree_routine)(const struct tuple_field *field,
+					uint32_t idx, const char *tuple,
+					const char *offset, void *ctx);
+
+/**
+ * Execute a @routine on @field leaf records of JSON path
+ * represented as a tree with specified @tuple.
+ * @param field to use on initialization.
+ * @param idx root field index to emmit correct error.
+ * @param tuple source raw data.
+ * @param offset calculated offset of field that path refers to.
+ * @param ctx callback argument
+ * @retval 0 on success.
+ * @retval -1 on error.
+ */
+int
+json_field_tree_exec_routine(const struct tuple_field *field, uint32_t idx,
+			     const char *tuple, const char *offset,
+			     json_field_tree_routine routine, void *routine_ctx);
+
+/**
+ * Propagate @a field to MessagePack(field)[index].
+ * @param[in][out] field Field to propagate.
+ * @param index 1-based index to propagate to.
+ *
+ * @retval  0 Success, the index was found.
+ * @retval -1 Not found.
+ */
+int
+tuple_field_go_to_index(const char **field, uint64_t index);
+
+/**
+ * Propagate @a field to MessagePack(field)[key].
+ * @param[in][out] field Field to propagate.
+ * @param key Key to propagate to.
+ * @param len Length of @a key.
+ *
+ * @retval  0 Success, the index was found.
+ * @retval -1 Not found.
+ */
+int
+tuple_field_go_to_key(const char **field, const char *key, int len);
 
 #if defined(__cplusplus)
 } /* extern "C" */

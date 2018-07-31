@@ -1,15 +1,25 @@
 #include "tuple_extract_key.h"
 #include "tuple.h"
 #include "fiber.h"
+#include "json/path.h"
 
 enum { MSGPACK_NULL = 0xc0 };
+
+static bool
+key_def_parts_are_sequential(const struct key_def *def, int i)
+{
+	uint32_t fieldno1 = def->parts[i].fieldno + 1;
+	uint32_t fieldno2 = def->parts[i + 1].fieldno;
+	return fieldno1 == fieldno2 && def->parts[i].path == NULL &&
+		def->parts[i + 1].path == NULL;
+}
 
 /** True, if a key con contain two or more parts in sequence. */
 static bool
 key_def_contains_sequential_parts(const struct key_def *def)
 {
 	for (uint32_t i = 0; i < def->part_count - 1; ++i) {
-		if (def->parts[i].fieldno + 1 == def->parts[i + 1].fieldno)
+		if (key_def_parts_are_sequential(def, i))
 			return true;
 	}
 	return false;
@@ -132,8 +142,7 @@ tuple_extract_key_slowpath(const struct tuple *tuple,
 			 * minimize tuple_field_raw() calls.
 			 */
 			for (; i < part_count - 1; i++) {
-				if (key_def->parts[i].fieldno + 1 !=
-				    key_def->parts[i + 1].fieldno) {
+				if (!key_def_parts_are_sequential(key_def, i)) {
 					/*
 					 * End of sequential part.
 					 */
@@ -180,8 +189,7 @@ tuple_extract_key_slowpath(const struct tuple *tuple,
 			 * minimize tuple_field_raw() calls.
 			 */
 			for (; i < part_count - 1; i++) {
-				if (key_def->parts[i].fieldno + 1 !=
-				    key_def->parts[i + 1].fieldno) {
+				if (!key_def_parts_are_sequential(key_def, i)) {
 					/*
 					 * End of sequential part.
 					 */
@@ -214,12 +222,13 @@ tuple_extract_key_slowpath(const struct tuple *tuple,
  * General-purpose version of tuple_extract_key_raw()
  * @copydoc tuple_extract_key_raw()
  */
-template <bool has_optional_parts>
+template <bool has_optional_parts, bool is_flat>
 static char *
 tuple_extract_key_slowpath_raw(const char *data, const char *data_end,
 			       const struct key_def *key_def,
 			       uint32_t *key_size)
 {
+	assert(!is_flat == key_def->has_json_paths);
 	assert(!has_optional_parts || key_def->is_nullable);
 	assert(has_optional_parts == key_def->has_optional_parts);
 	assert(mp_sizeof_nil() == 1);
@@ -247,11 +256,11 @@ tuple_extract_key_slowpath_raw(const char *data, const char *data_end,
 		uint32_t fieldno = key_def->parts[i].fieldno;
 		uint32_t null_count = 0;
 		for (; i < key_def->part_count - 1; i++) {
-			if (key_def->parts[i].fieldno + 1 !=
-			    key_def->parts[i + 1].fieldno)
+			if (!key_def_parts_are_sequential(key_def, i))
 				break;
 		}
-		uint32_t end_fieldno = key_def->parts[i].fieldno;
+		const struct key_part *part = &key_def->parts[i];
+		uint32_t end_fieldno = part->fieldno;
 
 		if (fieldno < current_fieldno) {
 			/* Rewind. */
@@ -293,6 +302,38 @@ tuple_extract_key_slowpath_raw(const char *data, const char *data_end,
 				current_fieldno++;
 			}
 		}
+		const char *field_last, *field_end_last;
+		if (!is_flat && part->path != NULL) {
+			field_last = field;
+			field_end_last = field_end;
+			struct json_path_parser parser;
+			struct json_path_node node;
+			json_path_parser_create(&parser, part->path,
+						part->path_len);
+			/* Skip fieldno. */
+			int rc = json_path_next(&parser, &node);
+			assert(rc == 0);
+			while ((rc = json_path_next(&parser, &node)) == 0 &&
+				node.type != JSON_PATH_END) {
+				switch(node.type) {
+				case JSON_PATH_NUM:
+					rc = tuple_field_go_to_index(&field,
+								     node.num);
+					break;
+				case JSON_PATH_STR:
+					rc = tuple_field_go_to_key(&field,
+								   node.str,
+								   node.len);
+					break;
+				default:
+					unreachable();
+				}
+				assert(rc == 0);
+			}
+			assert(rc == 0 && node.type == JSON_PATH_END);
+			field_end = field;
+			mp_next(&field_end);
+		}
 		memcpy(key_buf, field, field_end - field);
 		key_buf += field_end - field;
 		if (has_optional_parts && null_count != 0) {
@@ -300,6 +341,10 @@ tuple_extract_key_slowpath_raw(const char *data, const char *data_end,
 			key_buf += null_count * mp_sizeof_nil();
 		} else {
 			assert(key_buf - key <= data_end - data);
+		}
+		if (!is_flat && part->path != NULL) {
+			field = field_last;
+			field_end = field_end_last;
 		}
 	}
 	if (key_size != NULL)
@@ -330,32 +375,74 @@ tuple_extract_key_set(struct key_def *key_def)
 		if (key_def->has_optional_parts) {
 			assert(key_def->is_nullable);
 			if (key_def_contains_sequential_parts(key_def)) {
-				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<true, true,
-								   true>;
+				if (key_def->has_json_paths) {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<true,
+									   true,
+									   false>;
+				} else {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<true,
+									   true,
+									   true>;
+				}
 			} else {
-				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<false, true,
-								   true>;
+				if (key_def->has_json_paths) {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<false,
+									   true,
+									   false>;
+				} else {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<false,
+									   true,
+									   true>;
+				}
 			}
 		} else {
 			if (key_def_contains_sequential_parts(key_def)) {
-				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<true, false,
-								   true>;
+				if (key_def->has_json_paths) {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<true,
+									   false,
+									   false>;
+				} else {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<true,
+									   false,
+									   true>;
+				}
 			} else {
-				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<false, false,
-								   true>;
+				if (key_def->has_json_paths) {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<false,
+									   false,
+									   false>;
+				} else {
+					key_def->tuple_extract_key =
+						tuple_extract_key_slowpath<false,
+									   false,
+									   true>;
+				}
 			}
 		}
 	}
 	if (key_def->has_optional_parts) {
 		assert(key_def->is_nullable);
-		key_def->tuple_extract_key_raw =
-			tuple_extract_key_slowpath_raw<true>;
+		if (key_def->has_json_paths) {
+			key_def->tuple_extract_key_raw =
+				tuple_extract_key_slowpath_raw<true, false>;
+		} else {
+			key_def->tuple_extract_key_raw =
+				tuple_extract_key_slowpath_raw<true, true>;
+		}
 	} else {
-		key_def->tuple_extract_key_raw =
-			tuple_extract_key_slowpath_raw<false>;
+		if (key_def->has_json_paths) {
+			key_def->tuple_extract_key_raw =
+				tuple_extract_key_slowpath_raw<false, false>;
+		} else {
+			key_def->tuple_extract_key_raw =
+				tuple_extract_key_slowpath_raw<false, true>;
+		}
 	}
 }

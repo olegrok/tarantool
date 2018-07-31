@@ -469,7 +469,8 @@ tuple_compare_slowpath(const struct tuple *tuple_a, const struct tuple *tuple_b,
 	const struct key_part *part = key_def->parts;
 	const char *tuple_a_raw = tuple_data(tuple_a);
 	const char *tuple_b_raw = tuple_data(tuple_b);
-	if (key_def->part_count == 1 && part->fieldno == 0) {
+	if (key_def->part_count == 1 && part->fieldno == 0 &&
+	    part->path == NULL) {
 		/*
 		 * First field can not be optional - empty tuples
 		 * can not exist.
@@ -1060,13 +1061,19 @@ tuple_compare_create(const struct key_def *def)
 			else
 				return tuple_compare_sequential<true, false>;
 		} else if (def->has_optional_parts) {
-			return tuple_compare_slowpath<true, true, true>;
+			if (def->has_json_paths)
+				return tuple_compare_slowpath<true, true, false>;
+			else
+				return tuple_compare_slowpath<true, true, true>;
 		} else {
-			return tuple_compare_slowpath<true, false, true>;
+			if (def->has_json_paths)
+				return tuple_compare_slowpath<true, false, false>;
+			else
+				return tuple_compare_slowpath<true, false, true>;
 		}
 	}
 	assert(! def->has_optional_parts);
-	if (!key_def_has_collation(def)) {
+	if (!key_def_has_collation(def) && !def->has_json_paths) {
 		/* Precalculated comparators don't use collation */
 		for (uint32_t k = 0;
 		     k < sizeof(cmp_arr) / sizeof(cmp_arr[0]); k++) {
@@ -1084,6 +1091,8 @@ tuple_compare_create(const struct key_def *def)
 	}
 	if (key_def_is_sequential(def))
 		return tuple_compare_sequential<false, false>;
+	else if (def->has_json_paths)
+		return tuple_compare_slowpath<false, false, false>;
 	else
 		return tuple_compare_slowpath<false, false, true>;
 }
@@ -1280,13 +1289,29 @@ tuple_compare_with_key_create(const struct key_def *def)
 									 false>;
 			}
 		} else if (def->has_optional_parts) {
-			return tuple_compare_with_key_slowpath<true, true, true>;
+			if (def->has_json_paths) {
+				return tuple_compare_with_key_slowpath<true,
+									true,
+									false>;
+			} else {
+				return tuple_compare_with_key_slowpath<true,
+									true,
+									true>;
+			}
 		} else {
-			return tuple_compare_with_key_slowpath<true, false, true>;
+			if (def->has_json_paths) {
+				return tuple_compare_with_key_slowpath<true,
+									false,
+									false>;
+			} else {
+				return tuple_compare_with_key_slowpath<true,
+									false,
+									true>;
+			}
 		}
 	}
 	assert(! def->has_optional_parts);
-	if (!key_def_has_collation(def)) {
+	if (!key_def_has_collation(def) && !def->has_json_paths) {
 		/* Precalculated comparators don't use collation */
 		for (uint32_t k = 0;
 		     k < sizeof(cmp_wk_arr) / sizeof(cmp_wk_arr[0]);
@@ -1307,6 +1332,8 @@ tuple_compare_with_key_create(const struct key_def *def)
 	}
 	if (key_def_is_sequential(def))
 		return tuple_compare_with_key_sequential<false, false>;
+	else if (def->has_json_paths)
+		return tuple_compare_with_key_slowpath<false, false, false>;
 	else
 		return tuple_compare_with_key_slowpath<false, false, true>;
 }

@@ -84,6 +84,8 @@ struct key_part {
 	char *path;
 	/** JSON path length. */
 	uint32_t path_len;
+	/** JSON path hash. */
+	uint32_t path_hash;
 };
 
 struct key_def;

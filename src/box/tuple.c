@@ -135,6 +135,18 @@ runtime_tuple_delete(struct tuple_format *format, struct tuple *tuple)
 	smfree(&runtime_alloc, tuple, total);
 }
 
+static int
+tuple_validate_json_path_data(const struct tuple_field *field, uint32_t idx,
+			      const char *tuple, const char *offset, void *ctx)
+{
+	(void)tuple;
+	(void)ctx;
+	if (key_mp_type_validate(field->type, mp_typeof(*offset),
+				 ER_KEY_PART_TYPE, idx, field->is_nullable) != 0)
+		return -1;
+	return 0;
+}
+
 int
 tuple_validate_raw(struct tuple_format *format, const char *tuple)
 {
@@ -159,14 +171,23 @@ tuple_validate_raw(struct tuple_format *format, const char *tuple)
 
 	/* Check field types */
 	struct tuple_field *field = &format->fields[0];
+	const char *pos = tuple;
 	uint32_t i = 0;
 	uint32_t defined_field_count = MIN(field_count, format->field_count);
 	for (; i < defined_field_count; ++i, ++field) {
-		if (key_mp_type_validate(field->type, mp_typeof(*tuple),
+		if (key_mp_type_validate(field->type, mp_typeof(*pos),
 					 ER_FIELD_TYPE, i + TUPLE_INDEX_BASE,
 					 field->is_nullable))
 			return -1;
-		mp_next(&tuple);
+		/* Check all JSON paths. */
+		if (field->array != NULL) {
+			json_field_tree_routine func =
+				tuple_validate_json_path_data;
+			if (json_field_tree_exec_routine(field, i, tuple, pos,
+							 func, NULL) != 0)
+				return -1;
+		}
+		mp_next(&pos);
 	}
 	return 0;
 }

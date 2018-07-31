@@ -36,6 +36,7 @@
 #include "schema_def.h"
 #include "coll_id_cache.h"
 #include "fiber.h"
+#include "assoc.h"
 #include "json/path.h"
 
 static const struct key_part_def key_part_def_default = {
@@ -319,9 +320,11 @@ key_def_set_part(struct key_def *def, uint32_t part_no, uint32_t fieldno,
 		assert(def->parts[part_no].path != NULL);
 		memcpy(def->parts[part_no].path, path, path_len);
 		def->parts[part_no].path[path_len] = '\0';
+		def->parts[part_no].path_hash = mh_strn_hash(path, path_len);
 	} else {
 		def->parts[part_no].path_len = 0;
 		def->parts[part_no].path = NULL;
+		def->parts[part_no].path_hash = 0;
 	}
 	column_mask_set_fieldno(&def->column_mask, fieldno);
 	/**
