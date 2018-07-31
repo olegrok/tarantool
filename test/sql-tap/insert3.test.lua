@@ -1,6 +1,6 @@
 #!/usr/bin/env tarantool
 test = require("sqltester")
-test:plan(18)
+test:plan(20)
 
 --!./tcltestrunner.lua
 -- 2005 January 13
@@ -261,6 +261,31 @@ test:do_execsql_test(
 		-- <insert3-4.1>
 		-- <insert3-4.1>
 })
+
+-- gh-2618 function last_insert_id
+test:execsql("CREATE TABLE t8(id INTEGER PRIMARY KEY AUTOINCREMENT, a INT);")
+test:do_execsql_test(
+    "insert3-5.1",
+    [[
+        INSERT INTO t8 VALUES (null, 11);
+        SELECT LAST_INSERT_ID();
+    ]], {
+        -- <insert3-5.1>
+        1
+        -- <insert3-5.1>
+})
+
+test:do_execsql_test(
+    "insert3-5.2",
+    [[
+        INSERT INTO t8 VALUES (null, 44), (null, 55), (null, 66);
+        SELECT LAST_INSERT_ID();
+    ]], {
+        -- <insert3-5.1>
+        2
+        -- <insert3-5.1>
+})
+
 
 test:drop_all_tables()
 ---------------------------------------------------------------------------

@@ -667,16 +667,20 @@ static void
 netbox_decode_sql_info(struct lua_State *L, const char **data)
 {
 	uint32_t map_size = mp_decode_map(data);
-	/* Only SQL_INFO_ROW_COUNT is available. */
 	assert(map_size == 1);
 	(void) map_size;
 	uint32_t key = mp_decode_uint(data);
 	assert(key == SQL_INFO_ROW_COUNT);
-	(void) key;
 	uint32_t row_count = mp_decode_uint(data);
-	lua_createtable(L, 0, 1);
+	key = mp_decode_uint(data);
+	assert(key == SQL_INFO_LAST_INSERT_ID);
+	int64_t last_insert_id;
+	mp_read_int64(data, &last_insert_id);
+	lua_createtable(L, 0, 2);
 	lua_pushinteger(L, row_count);
 	lua_setfield(L, -2, "rowcount");
+	lua_pushinteger(L, last_insert_id);
+	lua_setfield(L, -2, "last_insert_id");
 }
 
 static int

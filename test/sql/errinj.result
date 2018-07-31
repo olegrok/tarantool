@@ -73,7 +73,8 @@ while f1:status() ~= 'dead' do fiber.sleep(0) end
 ...
 insert_res
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 select_res
 ---

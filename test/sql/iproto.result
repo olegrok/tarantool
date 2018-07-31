@@ -69,19 +69,23 @@ type(ret.rows[1])
 -- Operation with rowcount result.
 cn:execute('insert into test values (10, 11, NULL)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('delete from test where a = 5')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('insert into test values (11, 12, NULL), (12, 12, NULL), (13, 12, NULL)')
 ---
-- rowcount: 3
+- last_insert_id: 0
+  rowcount: 3
 ...
 cn:execute('delete from test where a = 12')
 ---
-- rowcount: 3
+- last_insert_id: 0
+  rowcount: 3
 ...
 -- SQL errors.
 cn:execute('insert into not_existing_table values ("kek")')
@@ -330,7 +334,8 @@ cn:execute('select :value', parameters)
 -- gh-2608 SQL iproto DDL
 cn:execute('create table test2(id primary key, a, b, c)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 box.space.TEST2.name
 ---
@@ -338,7 +343,8 @@ box.space.TEST2.name
 ...
 cn:execute('insert into test2 values (1, 1, 1, 1)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('select * from test2')
 ---
@@ -352,7 +358,8 @@ cn:execute('select * from test2')
 ...
 cn:execute('create index test2_a_b_index on test2(a, b)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 #box.space.TEST2.index
 ---
@@ -360,7 +367,8 @@ cn:execute('create index test2_a_b_index on test2(a, b)')
 ...
 cn:execute('drop table test2')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 box.space.TEST2
 ---
@@ -370,100 +378,121 @@ box.space.TEST2
 -- Test CREATE [IF NOT EXISTS] TABLE.
 cn:execute('create table test3(id primary key, a, b)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 -- Rowcount = 1, although two tuples were created:
 -- for _space and for _index.
 cn:execute('insert into test3 values (1, 1, 1), (2, 2, 2), (3, 3, 3)')
 ---
-- rowcount: 3
+- last_insert_id: 0
+  rowcount: 3
 ...
 cn:execute('create table if not exists test3(id primary key)')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 -- Test CREATE VIEW [IF NOT EXISTS] and
 --      DROP   VIEW [IF EXISTS].
 cn:execute('create view test3_view(id) as select id from test3')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('create view if not exists test3_view(id) as select id from test3')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 cn:execute('drop view test3_view')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('drop view if exists test3_view')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 -- Test CREATE INDEX [IF NOT EXISTS] and
 --      DROP   INDEX [IF EXISTS].
 cn:execute('create index test3_sec on test3(a, b)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('create index if not exists test3_sec on test3(a, b)')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 cn:execute('drop index test3_sec on test3')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('drop index if exists test3_sec on test3')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 -- Test CREATE TRIGGER [IF NOT EXISTS] and
 --      DROP   TRIGGER [IF EXISTS].
 cn:execute('create trigger trig INSERT ON test3 BEGIN SELECT * FROM test3; END;')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('create trigger if not exists trig INSERT ON test3 BEGIN SELECT * FROM test3; END;')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 cn:execute('drop trigger trig')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('drop trigger if exists trig')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 -- Test DROP TABLE [IF EXISTS].
 -- Create more indexes, triggers and _truncate tuple.
 cn:execute('create index idx1 on test3(a)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('create index idx2 on test3(b)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 box.space.TEST3:truncate()
 ---
 ...
 cn:execute('create trigger trig INSERT ON test3 BEGIN SELECT * FROM test3; END;')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('insert into test3 values (1, 1, 1), (2, 2, 2), (3, 3, 3)')
 ---
-- rowcount: 3
+- last_insert_id: 0
+  rowcount: 3
 ...
 cn:execute('drop table test3')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 cn:execute('drop table if exists test3')
 ---
-- rowcount: 0
+- last_insert_id: 0
+  rowcount: 0
 ...
 --
 -- gh-2948: sql: remove unnecessary templates for binding
@@ -535,7 +564,8 @@ cn = remote.connect(box.cfg.listen)
 ...
 cn:execute('create table test (id integer primary key, a integer, b integer)')
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 future1 = cn:execute('insert into test values (1, 1, 1)', nil, nil, {is_async = true})
 ---
@@ -548,7 +578,8 @@ future3 = cn:execute('insert into test values (2, 2, 2), (3, 3, 3)', nil, nil, {
 ...
 future1:wait_result()
 ---
-- rowcount: 1
+- last_insert_id: 0
+  rowcount: 1
 ...
 future2:wait_result()
 ---
@@ -558,7 +589,8 @@ future2:wait_result()
 ...
 future3:wait_result()
 ---
-- rowcount: 2
+- last_insert_id: 0
+  rowcount: 2
 ...
 future4 = cn:execute('select * from test', nil, nil, {is_async = true})
 ---
@@ -573,6 +605,91 @@ future4:wait_result()
   - [1, 1, 1]
   - [2, 2, 2]
   - [3, 3, 3]
+...
+cn:close()
+---
+...
+box.sql.execute('drop table test')
+---
+...
+-- gh-2618 Return generated columns after INSERT in IPROTO.
+-- Return first PK autogenerated in last INSERT/REPLACE in which
+-- new PK was genereted in current session.
+box.sql.execute('create table test (id integer primary key autoincrement, a integer)')
+---
+...
+cn = remote.connect(box.cfg.listen)
+---
+...
+cn:execute('insert into test values (1, 1)')
+---
+- last_insert_id: 0
+  rowcount: 1
+...
+cn:execute('insert into test values (null, 2)')
+---
+- last_insert_id: 2
+  rowcount: 1
+...
+cn:execute('insert into test values (null, 2), (null, 3)')
+---
+- last_insert_id: 3
+  rowcount: 2
+...
+cn:execute('insert into test values (17, 2)')
+---
+- last_insert_id: 3
+  rowcount: 1
+...
+cn:execute('update test set a = 11 where id == 1')
+---
+- last_insert_id: 3
+  rowcount: 1
+...
+cn:execute('update test set a = 12 where id == 2')
+---
+- last_insert_id: 3
+  rowcount: 1
+...
+cn:execute('update test set a = 13 where id == 3')
+---
+- last_insert_id: 3
+  rowcount: 1
+...
+cn:execute('replace into test values (4, 44), (null, 100)')
+---
+- last_insert_id: 18
+  rowcount: 2
+...
+cn:execute('insert into test values (null, 2), (null, 3)')
+---
+- last_insert_id: 19
+  rowcount: 2
+...
+cn:execute('select * from test')
+---
+- metadata:
+  - name: ID
+  - name: A
+  rows:
+  - [1, 11]
+  - [2, 12]
+  - [3, 13]
+  - [4, 44]
+  - [17, 2]
+  - [18, 100]
+  - [19, 2]
+  - [20, 3]
+...
+cn:execute('create table test2 (id integer primary key, a integer)')
+---
+- last_insert_id: 19
+  rowcount: 1
+...
+cn:execute('drop table test2')
+---
+- last_insert_id: 19
+  rowcount: 1
 ...
 cn:close()
 ---

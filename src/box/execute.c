@@ -42,6 +42,7 @@
 #include "schema.h"
 #include "port.h"
 #include "tuple.h"
+#include "session.h"
 
 const char *sql_type_strs[] = {
 	NULL,
@@ -640,8 +641,13 @@ err:
 		if (iproto_reply_map_key(out, 1, IPROTO_SQL_INFO) != 0)
 			goto err;
 		int changes = sqlite3_changes(db);
+		int64_t last_insert_id = current_session()->sql_last_insert_id;
 		int size = mp_sizeof_uint(SQL_INFO_ROW_COUNT) +
-			   mp_sizeof_uint(changes);
+			   mp_sizeof_uint(changes) +
+			   mp_sizeof_uint(SQL_INFO_LAST_INSERT_ID) +
+			   (last_insert_id >= 0 ?
+			    mp_sizeof_uint(last_insert_id) :
+			    mp_sizeof_int(last_insert_id));
 		char *buf = obuf_alloc(out, size);
 		if (buf == NULL) {
 			diag_set(OutOfMemory, size, "obuf_alloc", "buf");
@@ -649,6 +655,9 @@ err:
 		}
 		buf = mp_encode_uint(buf, SQL_INFO_ROW_COUNT);
 		buf = mp_encode_uint(buf, changes);
+		buf = mp_encode_uint(buf, SQL_INFO_LAST_INSERT_ID);
+		buf = last_insert_id < 0 ? mp_encode_int(buf, last_insert_id) :
+		      mp_encode_uint(buf, last_insert_id);
 	}
 	iproto_reply_sql(out, &header_svp, response->sync, schema_version,
 			 keys);

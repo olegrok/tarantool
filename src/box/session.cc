@@ -108,6 +108,7 @@ session_create(enum session_type type)
 	session->type = type;
 	session->sql_flags = default_flags;
 	session->sql_default_engine = SQL_STORAGE_ENGINE_MEMTX;
+	session->sql_last_insert_id = 0;
 
 	/* For on_connect triggers. */
 	credentials_init(&session->credentials, guest_user->auth_token,
