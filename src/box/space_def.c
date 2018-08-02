@@ -56,6 +56,7 @@ const struct space_opts space_opts_default = {
 	/* .view = */ false,
 	/* .sql        = */ NULL,
 	/* .checks     = */ NULL,
+	/* .sql_autoinc_fieldno = */ UINT32_MAX,
 };
 
 const struct opt_def space_opts_reg[] = {
@@ -65,6 +66,8 @@ const struct opt_def space_opts_reg[] = {
 	OPT_DEF("sql", OPT_STRPTR, struct space_opts, sql),
 	OPT_DEF_ARRAY("checks", struct space_opts, checks,
 		      checks_array_decode),
+	OPT_DEF("sql_autoinc", OPT_UINT32, struct space_opts,
+		sql_autoinc_fieldno),
 	OPT_END,
 };
 

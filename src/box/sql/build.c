@@ -399,7 +399,7 @@ sql_table_new(Parse *parser, char *name)
 	strcpy(table->def->engine_name,
 	       sql_storage_engine_strs[current_session()->sql_default_engine]);
 
-	table->iAutoIncPKey = -1;
+	table->def->opts.sql_autoinc_fieldno = UINT32_MAX;
 	table->pSchema = db->pSchema;
 	table->nTabRef = 1;
 	return table;
@@ -867,7 +867,7 @@ sqlite3AddPrimaryKey(Parse * pParse,	/* Parsing context */
 	    sortOrder != SORT_ORDER_DESC) {
 		assert(autoInc == 0 || autoInc == 1);
 		if (autoInc)
-			pTab->iAutoIncPKey = iCol;
+			pTab->def->opts.sql_autoinc_fieldno = iCol;
 		struct sqlite3 *db = pParse->db;
 		struct ExprList *list;
 		struct Token token;
@@ -1696,7 +1696,7 @@ sqlite3EndTable(Parse * pParse,	/* Parse context */
 	 * Check to see if we need to create an _sequence table
 	 * for keeping track of autoincrement keys.
 	 */
-	if (p->iAutoIncPKey >= 0) {
+	if (p->def->opts.sql_autoinc_fieldno != UINT32_MAX) {
 		assert(reg_space_id != 0);
 		/* Do an insertion into _sequence. */
 		int reg_seq_id = ++pParse->nMem;

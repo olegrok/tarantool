@@ -575,7 +575,8 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 			}
 			if ((!useTempTable && !pList)
 			    || (pColumn && j >= pColumn->nId)) {
-				if (i == pTab->iAutoIncPKey) {
+				if (i ==
+				    (int) pTab->def->opts.sql_autoinc_fieldno) {
 					sqlite3VdbeAddOp2(v, OP_Integer, -1,
 							  regCols + i + 1);
 				} else {
@@ -638,7 +639,8 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 			}
 			if (j < 0 || nColumn == 0
 			    || (pColumn && j >= pColumn->nId)) {
-				if (i == pTab->iAutoIncPKey) {
+				if (i ==
+				    (int) pTab->def->opts.sql_autoinc_fieldno) {
 					sqlite3VdbeAddOp2(v,
 							  OP_NextAutoincValue,
 							  pTab->def->id,
@@ -653,7 +655,8 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 							  dflt,
 							  iRegStore);
 			} else if (useTempTable) {
-				if (i == pTab->iAutoIncPKey) {
+				if (i ==
+				    (int) pTab->def->opts.sql_autoinc_fieldno) {
 					int regTmp = ++pParse->nMem;
 					/* Emit code which doesn't override
 					 * autoinc-ed value with select result
@@ -672,7 +675,8 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 				}
 			} else if (pSelect) {
 				if (regFromSelect != regData) {
-					if (i == pTab->iAutoIncPKey) {
+					if (i ==
+					    (int) pTab->def->opts.sql_autoinc_fieldno) {
 						/* Emit code which doesn't override
 						 * autoinc-ed value with select result
 						 * in case that result is NULL
@@ -694,7 +698,8 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 				}
 			} else {
 
-				if (i == pTab->iAutoIncPKey) {
+				if (i ==
+				    (int) pTab->def->opts.sql_autoinc_fieldno) {
 					if (pList->a[j].pExpr->op == TK_NULL) {
 						sqlite3VdbeAddOp2(v, OP_Null, 0, iRegStore);
 						continue;
@@ -856,7 +861,8 @@ vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
 		if (is_update && upd_cols[i] < 0)
 			continue;
 		/* This column is allowed to be NULL. */
-		if (def->fields[i].is_nullable || tab->iAutoIncPKey == (int) i)
+		if (def->fields[i].is_nullable ||
+		    def->opts.sql_autoinc_fieldno == i)
 			continue;
 		enum on_conflict_action on_conflict_nullable =
 			on_conflict != ON_CONFLICT_ACTION_DEFAULT ?
@@ -949,7 +955,7 @@ vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
 		int reg_pk = new_tuple_reg + fieldno;
 		if (tab->def->fields[fieldno].affinity == AFFINITY_INTEGER) {
 			int skip_if_null = sqlite3VdbeMakeLabel(v);
-			if (tab->iAutoIncPKey >= 0) {
+			if (def->opts.sql_autoinc_fieldno != UINT32_MAX) {
 				sqlite3VdbeAddOp2(v, OP_IsNull, reg_pk,
 						  skip_if_null);
 			}

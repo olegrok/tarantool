@@ -750,7 +750,7 @@ sql_rename_table(uint32_t space_id, const char *new_name, char **sql_stmt)
 	if (sql_stmt_map == NULL || mp_typeof(*sql_stmt_map) != MP_MAP)
 		goto rename_fail;
 	uint32_t map_size = mp_decode_map(&sql_stmt_map);
-	if (map_size != 1)
+	if (map_size == 0)
 		goto rename_fail;
 	const char *sql_str = mp_decode_str(&sql_stmt_map, &key_len);
 
@@ -1359,14 +1359,21 @@ tarantoolSqlite3MakeTableOpts(Table *pTable, const char *zSql, char *buf)
 	const struct Enc *enc = get_enc(buf);
 	bool is_view = pTable != NULL && pTable->def->opts.is_view;
 	bool has_checks = pTable != NULL && pTable->def->opts.checks != NULL;
+	bool has_autoinc = pTable != NULL &&
+			   pTable->def->opts.sql_autoinc_fieldno != UINT32_MAX;
 	int checks_cnt = has_checks ? pTable->def->opts.checks->nExpr : 0;
-	char *p = enc->encode_map(buf, 1 + is_view + (checks_cnt > 0));
+	char *p = enc->encode_map(buf, 1 + is_view + has_autoinc +
+				  (checks_cnt > 0));
 
 	p = enc->encode_str(p, "sql", 3);
 	p = enc->encode_str(p, zSql, strlen(zSql));
 	if (is_view) {
 		p = enc->encode_str(p, "view", 4);
 		p = enc->encode_bool(p, true);
+	}
+	if (has_autoinc) {
+		p = enc->encode_str(p, "sql_autoinc", strlen("sql_autoinc"));
+		p = enc->encode_uint(p, pTable->def->opts.sql_autoinc_fieldno);
 	}
 	if (checks_cnt == 0)
 		return p - buf;

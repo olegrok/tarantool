@@ -68,6 +68,11 @@ struct space_opts {
 	char *sql;
 	/** SQL Checks expressions list. */
 	struct ExprList *checks;
+	/**
+	 * If SQL table is created with AUTOINCREMENT primary
+	 * key then this member contains its ordinal number.
+	 */
+	uint32_t sql_autoinc_fieldno;
 };
 
 extern const struct space_opts space_opts_default;

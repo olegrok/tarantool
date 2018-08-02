@@ -1850,8 +1850,6 @@ struct Savepoint {
 struct Table {
 	Index *pIndex;		/* List of SQL indexes on this table. */
 	u32 nTabRef;		/* Number of pointers to this Table */
-	i16 iAutoIncPKey;	/* If PK is marked INTEGER PRIMARY KEY AUTOINCREMENT, store
-				   column number here, -1 otherwise Tarantool specifics */
 	/**
 	 * Estimated number of entries in table.
 	 * Used only when table represents temporary objects,
