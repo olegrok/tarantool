@@ -133,6 +133,8 @@ write_set_search_key(write_set_t *tree, struct vy_lsm *lsm,
 
 /** Transaction object. */
 struct vy_tx {
+	/** Link in tx_manager::transactions. */
+	struct rlist in_transactions;
 	/** Transaction manager. */
 	struct tx_manager *xm;
 	/**
@@ -209,6 +211,10 @@ struct tx_manager {
 	 */
 	struct vy_tx *last_prepared_tx;
 	/**
+	 * List of open transactions, linked by vy_tx::in_transactions.
+	 */
+	struct rlist transactions;
+	/**
 	 * The list of TXs with a read view in order of vlsn.
 	 */
 	struct rlist read_views;
@@ -261,6 +267,13 @@ tx_manager_new(void);
 /** Delete a tx manager object. */
 void
 tx_manager_delete(struct tx_manager *xm);
+
+/**
+ * Abort all transactions that started before this point of time
+ * and haven't reached WAL yet.
+ */
+void
+tx_manager_abort_writers(struct tx_manager *xm);
 
 /** Initialize a tx object. */
 void

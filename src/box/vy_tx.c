@@ -106,6 +106,7 @@ tx_manager_new(void)
 		return NULL;
 	}
 
+	rlist_create(&xm->transactions);
 	rlist_create(&xm->read_views);
 	vy_global_read_view_create((struct vy_read_view *)&xm->global_read_view,
 				   INT64_MAX);
@@ -288,6 +289,7 @@ vy_tx_create(struct tx_manager *xm, struct vy_tx *tx)
 	vy_tx_read_set_new(&tx->read_set);
 	tx->psn = 0;
 	rlist_create(&tx->on_destroy);
+	rlist_add_entry(&xm->transactions, tx, in_transactions);
 }
 
 void
@@ -306,6 +308,7 @@ vy_tx_destroy(struct vy_tx *tx)
 	}
 
 	vy_tx_read_set_iter(&tx->read_set, NULL, vy_tx_read_set_free_cb, NULL);
+	rlist_del_entry(tx, in_transactions);
 }
 
 /** Return true if the transaction is read-only. */
@@ -853,6 +856,16 @@ vy_tx_set(struct vy_tx *tx, struct vy_lsm *lsm, struct tuple *stmt)
 	vy_stmt_counter_acct_tuple(&lsm->stat.txw.count, stmt);
 	stailq_add_tail_entry(&tx->log, v, next_in_log);
 	return 0;
+}
+
+void
+tx_manager_abort_writers(struct tx_manager *xm)
+{
+	struct vy_tx *tx;
+	rlist_foreach_entry(tx, &xm->transactions, in_transactions) {
+		if (tx->state == VINYL_TX_READY && !vy_tx_is_ro(tx))
+			tx->state = VINYL_TX_ABORT;
+	}
 }
 
 void
