@@ -556,6 +556,48 @@ local function update_index_parts_1_6_0(parts)
     return result
 end
 
+local function format_field_index_by_name(format, name)
+    for k,v in pairs(format) do
+        if v.name == name then
+            return k
+        end
+    end
+    return nil
+end
+
+local function format_field_resolve(format, name)
+    local idx = nil
+    local field_name = nil
+    -- try resolve whole name
+    idx = format_field_index_by_name(format, name)
+    if idx ~= nil then
+        return idx, nil
+    end
+    -- try resolve field by name
+    field_name = string.match(name, "^[a-z][a-z,0-9]*")
+    if field_name ~= nil then
+        idx = format_field_index_by_name(format, field_name)
+        local suffix = string.sub(name, string.len(field_name) + 2)
+        if idx ~= nil and suffix ~= nil then
+            return idx, string.format("[%d]%s", idx, suffix)
+        end
+        -- simplified json_path
+        return idx, nil
+    end
+    -- try resolve field by index
+    field_name = string.match(name, "^%[[0-9]*%]")
+    if field_name ~= nil then
+        idx = tonumber(string.sub(field_name, 2, -2))
+        local suffix = string.sub(name, string.len(field_name) + 2)
+        if suffix == nil then
+            -- simplified json_path
+            return idx, nil
+        end
+        return idx, name
+    end
+    return nil, nil
+end
+
 local function update_index_parts(format, parts)
     if type(parts) ~= "table" then
         box.error(box.error.ILLEGAL_PARAMS,
@@ -607,16 +649,18 @@ local function update_index_parts(format, parts)
             box.error(box.error.ILLEGAL_PARAMS,
                       "options.parts[" .. i .. "]: field (name or number) is expected")
         elseif type(part.field) == 'string' then
-            for k,v in pairs(format) do
-                if v.name == part.field then
-                    part.field = k
-                    break
-                end
-            end
-            if type(part.field) == 'string' then
+            local idx, path = format_field_resolve(format, part.field)
+            if idx == nil then
                 box.error(box.error.ILLEGAL_PARAMS,
                           "options.parts[" .. i .. "]: field was not found by name '" .. part.field .. "'")
             end
+            if part.path ~= nil and part.path ~= path then
+                box.error(box.error.ILLEGAL_PARAMS,
+                          "options.parts[" .. i .. "]: field path '"..part.path.." doesn't math path resolved by name '" .. part.field .. "'")
+            end
+            parts_can_be_simplified = parts_can_be_simplified and path == nil
+            part.field = idx
+            part.path = path or part.path
         elseif part.field == 0 then
             box.error(box.error.ILLEGAL_PARAMS,
                       "options.parts[" .. i .. "]: field (number) must be one-based")

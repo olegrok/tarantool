@@ -946,6 +946,42 @@ assert(idx ~= nil)
 ---
 - true
 ...
+format = {{'int1', 'unsigned'}, {'int2', 'unsigned'}, {'data', 'array'}, {'int3', 'unsigned'}, {'int4', 'unsigned'}}
+---
+...
+s:format(format)
+---
+- error: Field 3 has type 'map' in one index, but type 'array' in another
+...
+format = {{'int1', 'unsigned'}, {'int2', 'unsigned'}, {'data', 'map'}, {'int3', 'unsigned'}, {'int4', 'unsigned'}}
+---
+...
+s:format(format)
+---
+...
+idx2 = s:create_index('test2', {parts = {{2, 'number'}, {'[3]["FIO"]["fname"]', 'str', path = '[3].FIO.fname'}}})
+---
+- error: 'Illegal parameters, options.parts[2]: field path ''[3].FIO.fname doesn''t
+    math path resolved by name ''[3]["FIO"]["fname"]'''
+...
+idx2 = s:create_index('test2', {parts = {{2, 'number'}, {'[3]["FIO"]["fname"]', 'str', path = '[3]["FIO"]["fname"]'}}})
+---
+...
+assert(idx2 ~= nil)
+---
+- true
+...
+idx3 = s:create_index('test3', {parts = {{2, 'number'}, {'data.FIO["fname"]', 'str'}}})
+---
+...
+assert(idx3 ~= nil)
+---
+- true
+...
+assert(idx2.parts[2].path == "[3][\"FIO\"][\"fname\"]")
+---
+- true
+...
 s:insert{7, 7, {town = 'London', FIO = 666}, 4, 5}
 ---
 - error: Tuple doesn't math document structure defined as index
