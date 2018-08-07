@@ -695,7 +695,7 @@ rollback:
 }
 
 int
-box_ctl_promote_reset(void)
+promote_reset_until(uint32_t until)
 {
 	uint32_t id, next_id = 0;
 	struct index *pk = space_index(space_by_id(BOX_PROMOTION_ID), 0);
@@ -703,7 +703,15 @@ box_ctl_promote_reset(void)
 		id = next_id;
 		if (promote_clean_round(id, &next_id, pk) != 0)
 			return -1;
-	} while (id != next_id);
+	} while (id != next_id && next_id < until);
+	return 0;
+}
+
+int
+box_ctl_promote_reset(void)
+{
+	if (promote_reset_until(UINT32_MAX) != 0)
+		return -1;
 	promote_state.phase = PROMOTE_PHASE_NON_ACTIVE;
 	promote_state.is_role_committed = false;
 	return 0;
@@ -739,6 +747,9 @@ stop:
 	say_info("promotion timer is stopped");
 	assert(fiber() == promote_state.timer);
 	promote_state.timer = NULL;
+	if (promote_state.role == PROMOTE_ROLE_INITIATOR &&
+	    promote_state.phase == PROMOTE_PHASE_SUCCESS)
+		promote_reset_until(promote_state.round_id);
 	return 0;
 }
 

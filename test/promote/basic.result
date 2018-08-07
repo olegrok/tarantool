@@ -464,6 +464,29 @@ promotion_history()
 ---
 - []
 ...
+--
+-- Test promotion GC.
+--
+_ = test_run:switch('box2')
+---
+...
+box.ctl.promote()
+---
+- true
+...
+_ = test_run:switch('box1')
+---
+...
+box.ctl.promote()
+---
+- true
+...
+-- Each successfull round for 4 instance cluster produces 9
+-- records.
+#promotion_history() < 10
+---
+- true
+...
 _ = test_run:switch('default')
 ---
 ...
