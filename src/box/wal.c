@@ -662,8 +662,8 @@ wal_assign_lsn(struct wal_writer *writer, struct xrow_header **row,
 			(*row)->lsn = vclock_inc(&writer->vclock, instance_id);
 			(*row)->replica_id = instance_id;
 		} else {
-			vclock_follow(&writer->vclock, (*row)->replica_id,
-				      (*row)->lsn);
+			xrow_vclock_follow(&writer->vclock, (*row)->replica_id,
+					   (*row)->lsn, *row);
 		}
 	}
 }
@@ -888,9 +888,9 @@ wal_write(struct journal *journal, struct journal_entry *entry)
 				 */
 				if (vclock_get(&replicaset.vclock,
 					       instance_id) < (*last)->lsn) {
-					vclock_follow(&replicaset.vclock,
-						      instance_id,
-						      (*last)->lsn);
+					vclock_follow_unsafe(&replicaset.vclock,
+							     instance_id,
+							     (*last)->lsn);
 				}
 				break;
 			}
@@ -910,7 +910,7 @@ wal_write_in_wal_mode_none(struct journal *journal,
 	int64_t new_lsn = vclock_get(&writer->vclock, instance_id);
 	if (new_lsn > old_lsn) {
 		/* There were local writes, promote vclock. */
-		vclock_follow(&replicaset.vclock, instance_id, new_lsn);
+		vclock_follow_unsafe(&replicaset.vclock, instance_id, new_lsn);
 	}
 	return vclock_sum(&writer->vclock);
 }

@@ -49,6 +49,12 @@ vclock_follow(struct vclock *vclock, uint32_t replica_id, int64_t lsn)
 		      (unsigned) replica_id,
 		      (long long) prev_lsn, (long long) lsn);
 	}
+	return vclock_follow_unsafe(vclock, replica_id, lsn);
+}
+
+int64_t
+vclock_follow_unsafe(struct vclock *vclock, uint32_t replica_id, int64_t lsn) {
+	int64_t prev_lsn = vclock->lsn[replica_id];
 	/* Easier add each time than check. */
 	vclock->map |= 1 << replica_id;
 	vclock->lsn[replica_id] = lsn;

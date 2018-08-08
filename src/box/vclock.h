@@ -199,8 +199,30 @@ vclock_sum(const struct vclock *vclock)
 	return vclock->signature;
 }
 
+/**
+ * Update vclock with the next LSN value for given replica id.
+ * The function will cause panic if the next LSN happens to be
+ * out of order.
+ *
+ * @param vclock Vector clock.
+ * @param replica_id Replica identifier.
+ * @param lsn Next lsn.
+ */
 int64_t
 vclock_follow(struct vclock *vclock, uint32_t replica_id, int64_t lsn);
+
+/**
+ * Update vclock with the next LSN value for given replica id.
+ * No checks are performed by this function. It may only be 
+ * used when prior checks are performed with regard to validity
+ * of its parameters.
+ *
+ * @param vclock Vector clock.
+ * @param replica_id Replica identifier.
+ * @param lsn Next lsn.
+ */
+int64_t
+vclock_follow_unsafe(struct vclock *vclock, uint32_t replica_id, int64_t lsn);
 
 /**
  * \brief Format vclock to YAML-compatible string representation:

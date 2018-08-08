@@ -519,6 +519,21 @@ xrow_to_iovec(const struct xrow_header *row, struct iovec *out);
 void
 xrow_decode_error(struct xrow_header *row);
 
+/**
+ * Update vclock with the next LSN value for given replica id.
+ * The function will cause panic if the next LSN happens to be
+ * out of order. The details of provided row are included into
+ * diagnostic message.
+ *
+ * @param vclock Vector clock.
+ * @param replica_id Replica identifier.
+ * @param lsn Next lsn.
+ * @param row Data row.
+ */
+void
+xrow_vclock_follow(struct vclock* vclock, uint32_t replica_id, int64_t lsn,
+		   const struct xrow_header *row);
+
 #if defined(__cplusplus)
 } /* extern "C" */
 

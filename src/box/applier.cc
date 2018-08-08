@@ -336,8 +336,8 @@ applier_join(struct applier *applier)
 		coio_read_xrow(coio, ibuf, &row);
 		applier->last_row_time = ev_monotonic_now(loop());
 		if (iproto_type_is_dml(row.type)) {
-			vclock_follow(&replicaset.vclock, row.replica_id,
-				      row.lsn);
+			xrow_vclock_follow(&replicaset.vclock, row.replica_id,
+				           row.lsn, &row);
 			xstream_write_xc(applier->subscribe_stream, &row);
 		} else if (row.type == IPROTO_OK) {
 			/*
@@ -503,8 +503,8 @@ applier_subscribe(struct applier *applier)
 			 * the row is skipped when the replication
 			 * is resumed.
 			 */
-			vclock_follow(&replicaset.vclock, row.replica_id,
-				      row.lsn);
+			vclock_follow_unsafe(&replicaset.vclock, row.replica_id,
+					     row.lsn);
 			struct replica *replica = replica_by_id(row.replica_id);
 			struct latch *latch = (replica ? &replica->order_latch :
 					       &replicaset.applier.order_latch);

@@ -1194,3 +1194,27 @@ greeting_decode(const char *greetingbuf, struct greeting *greeting)
 
 	return 0;
 }
+
+void
+xrow_vclock_follow(struct vclock* vclock, uint32_t replica_id, int64_t lsn,
+		   const struct xrow_header *row) {
+	assert(lsn >= 0);
+	assert(replica_id < VCLOCK_MAX);
+	int64_t prev_lsn = vclock->lsn[replica_id];
+	if (lsn <= prev_lsn) {
+		const char* req_str = NULL;
+		if (row != NULL) {	
+			struct request req;
+			if (xrow_decode_dml((struct xrow_header *)row, &req, 0) == 0)
+				req_str = request_str(&req);
+		}
+		/* Never confirm LSN out of order. */
+		panic("LSN for %u is used twice or COMMIT order is broken: "
+		      "confirmed: %lld, new: %lld, req: %s",
+		      (unsigned) replica_id,
+		      (long long) prev_lsn,
+		      (long long) lsn,
+		      req_str?req_str:"n/a");
+	}
+	vclock_follow_unsafe(vclock, replica_id, lsn);
+}
