@@ -749,6 +749,10 @@ local function status()
     return 0
 end
 
+string.startswith = function (self, start)
+    return self:sub(1, #start) == start
+end
+
 local function eval()
     local console_sock_path = uri.parse(console_sock).service
     local filename = arg[3]
@@ -784,8 +788,9 @@ local function eval()
         return 2
     end
     local error_response = yaml.decode(full_response)[1]
-    if type(error_response) == 'table' and error_response.error then
-        log.error("Error while reloading config:")
+    if type(error_response) == 'table' and error_response.error and
+       error_response.error:startswith("[string") then
+        log.error("Error while executing command:")
         log.error(error_response.error)
         return 3
     end
