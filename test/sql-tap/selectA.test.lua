@@ -88,7 +88,7 @@ test:do_execsql_test(
         ORDER BY a,b,c
     ]], {
         -- <selectA-2.1>
-        "","C","c","","U","u",-23,"Y","y",1,"a","a",4,"Z","z",9,"b","B",4444,"m","M",5200000,"X","x"
+        "","C","c","","U","u",-23,"Y","y",-9,"e","e",1,"a","a",4,"Z","z",4,"d","D",9,"b","B",4444,"m","M",5200000,"X","x"
         -- </selectA-2.1>
     })
 
@@ -102,7 +102,7 @@ test:do_test(
         ]]
     end, {
         -- <selectA-2.1.1>
-        "","C","c","","U","u",-23,"Y","y",1,"a","a",4,"Z","z",9,"b","B",4444,"m","M",5200000,"X","x"
+        "","C","c","","U","u",-23,"Y","y",-9,"e","e",1,"a","a",4,"Z","z",4,"d","D",9,"b","B",4444,"m","M",5200000,"X","x"
         -- </selectA-2.1.1>
     })
 
@@ -116,7 +116,7 @@ test:do_test(
         ]]
     end, {
         -- <selectA-2.1.2>
-        5200000,"X","x",4444,"m","M",9,"b","B",4,"Z","z",1,"a","a",-23,"Y","y","","C","c","","U","u"
+        "","C","c","","U","u",-23,"Y","y",-9,"e","e",1,"a","a",4,"Z","z",4,"d","D",9,"b","B",4444,"m","M",5200000,"X","x"
         -- </selectA-2.1.2>
     })
 
@@ -127,7 +127,7 @@ test:do_execsql_test(
         ORDER BY a DESC,b,c
     ]], {
         -- <selectA-2.2>
-        5200000,"X","x",4444,"m","M",9,"b","B",4,"Z","z",1,"a","a",-23,"Y","y","","C","c","","U","u"
+        5200000,"X","x",4444,"m","M",9,"b","B",4,"Z","z",4,"d","D",1,"a","a",-9,"e","e",-23,"Y","y","","C","c","","U","u"
         -- </selectA-2.2>
     })
 
@@ -2370,8 +2370,8 @@ test:do_execsql_test(
     [[
         DROP TABLE IF EXISTS t4;
         DROP TABLE IF EXISTS t5;
-        CREATE TABLE t4(id int primary key, a int, b INT );
-        CREATE TABLE t5(id int primary key, c int, d INT );
+        CREATE TABLE t4(id int primary key, a int, b TEXT);
+        CREATE TABLE t5(id int primary key, c int, d TEXT);
 
         INSERT INTO t5 VALUES(0, 1, 'x');
         INSERT INTO t5 VALUES(1, 2, 'x');
