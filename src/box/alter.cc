@@ -887,6 +887,10 @@ alter_space_do(struct txn *txn, struct alter_space *alter)
 	alter->new_space->sequence = alter->old_space->sequence;
 	memcpy(alter->new_space->access, alter->old_space->access,
 	       sizeof(alter->old_space->access));
+	space_format_update_epoch(alter->new_space,
+				  alter->old_space->format != NULL ?
+				  alter->old_space->format->epoch : 0,
+				  &alter->key_list);
 
 	/*
 	 * Build new indexes, check if tuples conform to

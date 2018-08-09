@@ -74,6 +74,10 @@ struct key_part {
 	struct coll *coll;
 	/** True if a part can store NULLs. */
 	bool is_nullable;
+	/** Format epoch for slot_cache. */
+	uint64_t format_epoch;
+	/** Cache for corresponding tuple_format slot_offset. */
+	int32_t slot_cache;
 };
 
 struct key_def;

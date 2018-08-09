@@ -115,6 +115,11 @@ struct tuple_field {
  * Tuple format describes how tuple is stored and information about its fields
  */
 struct tuple_format {
+	/**
+	 * Tuple format epoch to validate key_part slot_cache
+	 * actuality. Changed on space rebuild if required.
+	 */
+	uint64_t epoch;
 	/** Virtual function table */
 	struct tuple_format_vtab vtab;
 	/** Pointer to engine-specific data. */
@@ -322,6 +327,20 @@ box_tuple_format_unref(box_tuple_format_t *format);
 int
 tuple_init_field_map(const struct tuple_format *format, uint32_t *field_map,
 		     const char *tuple);
+
+/**
+ * Get a field refereed by multipart index @def part @idx in
+ * @tuple.
+ *
+ * @param format tuple format
+ * @param tuple a pointer to MessagePack array
+ * @param field_map a pointer to the LAST element of field map
+ * @param part multipart index part to use.
+ * @retval field data if field exists or NULL
+ */
+const char *
+tuple_field_by_part(const struct tuple_format *format, const char *data,
+		    const uint32_t *field_map, struct key_part *part);
 
 /**
  * Get a field at the specific position in this MessagePack array.

@@ -157,7 +157,11 @@ struct TupleHash
 		uint32_t h = HASH_SEED;
 		uint32_t carry = 0;
 		uint32_t total_size = 0;
-		const char *field = tuple_field(tuple, key_def->parts->fieldno);
+		const char *field =
+			tuple_field_by_part(tuple_format(tuple),
+					    tuple_data(tuple),
+					    tuple_field_map(tuple),
+					    (struct key_part *)key_def->parts);
 		TupleFieldHash<TYPE, MORE_TYPES...>::
 			hash(&field, &h, &carry, &total_size);
 		return PMurHash32_Result(h, carry, total_size);
@@ -169,7 +173,11 @@ struct TupleHash<FIELD_TYPE_UNSIGNED> {
 	static uint32_t	hash(const struct tuple *tuple,
 			     const struct key_def *key_def)
 	{
-		const char *field = tuple_field(tuple, key_def->parts->fieldno);
+		const char *field =
+			tuple_field_by_part(tuple_format(tuple),
+					    tuple_data(tuple),
+					    tuple_field_map(tuple),
+					    (struct key_part *)key_def->parts);
 		uint64_t val = mp_decode_uint(&field);
 		if (likely(val <= UINT32_MAX))
 			return val;
@@ -211,7 +219,7 @@ static const hasher_signature hash_arr[] = {
 
 #undef HASHER
 
-template <bool has_optional_parts>
+template <bool has_optional_parts, bool is_flat>
 uint32_t
 tuple_hash_slowpath(const struct tuple *tuple, const struct key_def *key_def);
 
@@ -255,9 +263,9 @@ tuple_hash_func_set(struct key_def *key_def) {
 
 slowpath:
 	if (key_def->has_optional_parts)
-		key_def->tuple_hash = tuple_hash_slowpath<true>;
+		key_def->tuple_hash = tuple_hash_slowpath<true, true>;
 	else
-		key_def->tuple_hash = tuple_hash_slowpath<false>;
+		key_def->tuple_hash = tuple_hash_slowpath<false, true>;
 	key_def->key_hash = key_hash_slowpath;
 }
 
@@ -312,13 +320,16 @@ tuple_hash_key_part(uint32_t *ph1, uint32_t *pcarry,
 		    const struct tuple *tuple,
 		    const struct key_part *part)
 {
-	const char *field = tuple_field(tuple, part->fieldno);
+	const char *field =
+		tuple_field_by_part(tuple_format(tuple), tuple_data(tuple),
+				    tuple_field_map(tuple),
+				    (struct key_part *)part);
 	if (field == NULL)
 		return tuple_hash_null(ph1, pcarry);
 	return tuple_hash_field(ph1, pcarry, &field, part->coll);
 }
 
-template <bool has_optional_parts>
+template <bool has_optional_parts, bool is_flat>
 uint32_t
 tuple_hash_slowpath(const struct tuple *tuple, const struct key_def *key_def)
 {
@@ -327,7 +338,15 @@ tuple_hash_slowpath(const struct tuple *tuple, const struct key_def *key_def)
 	uint32_t carry = 0;
 	uint32_t total_size = 0;
 	uint32_t prev_fieldno = key_def->parts[0].fieldno;
-	const char *field = tuple_field(tuple, key_def->parts[0].fieldno);
+	const char *field;
+	if (is_flat) {
+		field = tuple_field(tuple, prev_fieldno);
+	} else {
+		field = tuple_field_by_part(tuple_format(tuple),
+					    tuple_data(tuple),
+					    tuple_field_map(tuple),
+					    (struct key_part *)&key_def->parts);
+	}
 	const char *end = (char *)tuple + tuple_size(tuple);
 	if (has_optional_parts && field == NULL) {
 		total_size += tuple_hash_null(&h, &carry);
@@ -341,7 +360,19 @@ tuple_hash_slowpath(const struct tuple *tuple, const struct key_def *key_def)
 		 * need of tuple_field
 		 */
 		if (prev_fieldno + 1 != key_def->parts[part_id].fieldno) {
-			field = tuple_field(tuple, key_def->parts[part_id].fieldno);
+			if (is_flat) {
+				field = tuple_field(tuple,
+						    key_def->parts[part_id].
+						    fieldno);
+			} else {
+				struct key_part *part =
+					(struct key_part *)
+					&key_def->parts[part_id];
+				field = tuple_field_by_part(tuple_format(tuple),
+							    tuple_data(tuple),
+							    tuple_field_map(tuple),
+							    part);
+			}
 		}
 		if (has_optional_parts && (field == NULL || field >= end)) {
 			total_size += tuple_hash_null(&h, &carry);

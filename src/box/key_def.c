@@ -258,6 +258,8 @@ key_def_set_part(struct key_def *def, uint32_t part_no, uint32_t fieldno,
 	def->parts[part_no].type = type;
 	def->parts[part_no].coll = coll;
 	def->parts[part_no].coll_id = coll_id;
+	def->parts[part_no].slot_cache = TUPLE_OFFSET_SLOT_NIL;
+	def->parts[part_no].format_epoch = 0;
 	column_mask_set_fieldno(&def->column_mask, fieldno);
 	/**
 	 * When all parts are set, initialize the tuple

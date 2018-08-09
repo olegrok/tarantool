@@ -228,6 +228,16 @@ struct key_def *
 space_index_key_def(struct space *space, uint32_t id);
 
 /**
+ * Setup space format epoch value.
+ * @param space to update.
+ * @param last_epoch last space epo
+ * @param key_list list of index_defs.
+ */
+void
+space_format_update_epoch(struct space *space, uint64_t last_epoch,
+			  struct rlist *key_list);
+
+/**
  * Look up the index by id.
  */
 static inline struct index *

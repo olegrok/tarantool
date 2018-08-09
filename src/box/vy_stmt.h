@@ -665,7 +665,11 @@ static inline bool
 vy_tuple_key_contains_null(const struct tuple *tuple, const struct key_def *def)
 {
 	for (uint32_t i = 0; i < def->part_count; ++i) {
-		const char *field = tuple_field(tuple, def->parts[i].fieldno);
+		const char *field =
+			tuple_field_by_part(tuple_format(tuple),
+					    tuple_data(tuple),
+					    tuple_field_map(tuple),
+					    (struct key_part *)&def->parts[i]);
 		if (field == NULL || mp_typeof(*field) == MP_NIL)
 			return true;
 	}

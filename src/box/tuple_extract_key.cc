@@ -91,7 +91,7 @@ tuple_extract_key_sequential(const struct tuple *tuple,
  * General-purpose implementation of tuple_extract_key()
  * @copydoc tuple_extract_key()
  */
-template <bool contains_sequential_parts, bool has_optional_parts>
+template <bool contains_sequential_parts, bool has_optional_parts, bool is_flat>
 static char *
 tuple_extract_key_slowpath(const struct tuple *tuple,
 			   const struct key_def *key_def, uint32_t *key_size)
@@ -110,9 +110,15 @@ tuple_extract_key_slowpath(const struct tuple *tuple,
 
 	/* Calculate the key size. */
 	for (uint32_t i = 0; i < part_count; ++i) {
-		const char *field =
-			tuple_field_raw(format, data, field_map,
-					key_def->parts[i].fieldno);
+		const char *field;
+		if (is_flat) {
+			field = tuple_field_raw(format, data, field_map,
+						key_def->parts[i].fieldno);
+		} else {
+			field = tuple_field_by_part(format, data, field_map,
+						    (struct key_part *)
+							&key_def->parts[i]);
+		}
 		if (has_optional_parts && field == NULL) {
 			bsize += mp_sizeof_nil();
 			continue;
@@ -152,9 +158,15 @@ tuple_extract_key_slowpath(const struct tuple *tuple,
 	}
 	char *key_buf = mp_encode_array(key, part_count);
 	for (uint32_t i = 0; i < part_count; ++i) {
-		const char *field =
-			tuple_field_raw(format, data, field_map,
-					key_def->parts[i].fieldno);
+		const char *field;
+		if (is_flat) {
+			field = tuple_field_raw(format, data, field_map,
+						key_def->parts[i].fieldno);
+		} else {
+			field = tuple_field_by_part(format, data, field_map,
+						    (struct key_part *)
+							&key_def->parts[i]);
+		}
 		if (has_optional_parts && field == NULL) {
 			key_buf = mp_encode_nil(key_buf);
 			continue;
@@ -318,19 +330,22 @@ tuple_extract_key_set(struct key_def *key_def)
 			assert(key_def->is_nullable);
 			if (key_def_contains_sequential_parts(key_def)) {
 				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<true, true>;
+					tuple_extract_key_slowpath<true, true,
+								   true>;
 			} else {
 				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<false, true>;
+					tuple_extract_key_slowpath<false, true,
+								   true>;
 			}
 		} else {
 			if (key_def_contains_sequential_parts(key_def)) {
 				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<true, false>;
+					tuple_extract_key_slowpath<true, false,
+								   true>;
 			} else {
 				key_def->tuple_extract_key =
-					tuple_extract_key_slowpath<false,
-								   false>;
+					tuple_extract_key_slowpath<false, false,
+								   true>;
 			}
 		}
 	}

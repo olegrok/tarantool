@@ -233,6 +233,11 @@ tuple_format_alloc(struct key_def * const *keys, uint16_t key_count,
 		format->dict = dict;
 		tuple_dictionary_ref(dict);
 	}
+	/*
+	 * Set invalid epoch that should be changed later on
+	 * attaching to space.
+	 */
+	format->epoch = 1;
 	format->refs = 0;
 	format->id = FORMAT_ID_NIL;
 	format->field_count = field_count;
@@ -540,6 +545,13 @@ tuple_field_go_to_key(const char **field, const char *key, int len)
 		mp_next(field);
 	}
 	return -1;
+}
+
+const char *
+tuple_field_by_part(const struct tuple_format *format, const char *data,
+		    const uint32_t *field_map, struct key_part *part)
+{
+	return tuple_field_raw(format, data, field_map, part->fieldno);
 }
 
 int

@@ -226,6 +226,31 @@ space_index_key_def(struct space *space, uint32_t id)
 }
 
 void
+space_format_update_epoch(struct space *space, uint64_t last_epoch,
+			  struct rlist *key_list)
+{
+	struct tuple_format *format = space->format;
+	if (format == NULL)
+		return;
+	bool is_format_epoch_changed = false;
+	struct index_def *index_def;
+	rlist_foreach_entry(index_def, key_list, link) {
+		struct key_part *part = index_def->key_def->parts;
+		struct key_part *parts_end =
+			part + index_def->key_def->part_count;
+		for (; part < parts_end; part++) {
+			struct tuple_field *field =
+				&format->fields[part->fieldno];
+			if (field->offset_slot != part->slot_cache)
+				is_format_epoch_changed = true;
+		}
+	}
+	format->epoch = last_epoch;
+	if (is_format_epoch_changed)
+		format->epoch++;
+}
+
+void
 generic_space_swap_index(struct space *old_space, struct space *new_space,
 			 uint32_t old_index_id, uint32_t new_index_id)
 {
