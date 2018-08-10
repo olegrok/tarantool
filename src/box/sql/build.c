@@ -1246,13 +1246,14 @@ createIndex(Parse * pParse, Index * pIndex, int iSpaceId, int iIndexId,
 
 	/* Format "opts" and "parts" for _index entry. */
 	zOpts = sqlite3DbMallocRaw(pParse->db,
-				   tarantoolSqlite3MakeIdxOpts(pIndex, zSql,
-							       NULL) +
+				   tarantoolSqlite3MakeIdxOpts(IsUniqueIndex(pIndex),
+							       zSql, NULL) +
 				   tarantoolSqlite3MakeIdxParts(pIndex,
 								NULL) + 2);
 	if (!zOpts)
 		return;
-	zOptsSz = tarantoolSqlite3MakeIdxOpts(pIndex, zSql, zOpts);
+	zOptsSz = tarantoolSqlite3MakeIdxOpts(IsUniqueIndex(pIndex), zSql,
+					      zOpts);
 	zParts = zOpts + zOptsSz + 1;
 	zPartsSz = tarantoolSqlite3MakeIdxParts(pIndex, zParts);
 #if SQLITE_DEBUG

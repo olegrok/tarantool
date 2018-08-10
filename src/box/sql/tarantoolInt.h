@@ -89,6 +89,20 @@ int tarantoolSqlite3ClearTable(struct space *space);
 int
 sql_rename_table(uint32_t space_id, const char *new_name, char **sql_stmt);
 
+/**
+ * Update CREATE INDEX field (def->opt.sql) replacing table name
+ * w/ new one in _index space.
+ *
+ * @param idef Index definition.
+ * @param new_tbl_name new name of table
+ * @param[out] sql_stmt New CREATE INDEX statement.
+ *
+ * @retval SQLITE_OK on success, SQLITE_TARANTOOL_ERROR otherwise.
+ */
+int
+sql_update_index_table_name(struct index_def *idef, const char *new_tbl_name,
+			    char **sql_stmt);
+
 /* Alter trigger statement after rename table. */
 int tarantoolSqlite3RenameTrigger(const char *zTriggerName,
 				  const char *zOldName, const char *zNewName);
@@ -171,12 +185,17 @@ fkey_encode_links(const struct fkey_def *def, int type, char *buf);
  */
 int tarantoolSqlite3MakeIdxParts(Index * index, void *buf);
 
-/*
+/**
  * Format "opts" dictionary for _index entry.
  * Returns result size.
  * If buf==NULL estimate result size.
+ *
+ * @param is_unique Flag if index is unique.
+ * @param zSql SQL create stmt.
+ * @param[out] buf destination buffer.
  */
-int tarantoolSqlite3MakeIdxOpts(Index * index, const char *zSql, void *buf);
+int
+tarantoolSqlite3MakeIdxOpts(bool is_unique, const char *zSql, void *buf);
 
 /**
  * Extract next id from _sequence space.

@@ -841,6 +841,46 @@ rename_fail:
 }
 
 int
+sql_update_index_table_name(struct index_def *def, const char *new_tbl_name,
+			    char **sql_stmt)
+{
+	assert(new_tbl_name != NULL);
+	uint32_t iid = def->iid;
+
+	bool is_quoted = false;
+	*sql_stmt = rename_table(db, def->opts.sql, new_tbl_name, &is_quoted);
+
+	uint32_t key_len = mp_sizeof_uint(def->space_id) + mp_sizeof_uint(iid) +
+			   mp_sizeof_array(2);
+	uint32_t new_opts_sz = tarantoolSqlite3MakeIdxOpts(def->opts.is_unique,
+							   *sql_stmt, NULL);
+	uint32_t op_sz = mp_sizeof_array(1) + mp_sizeof_array(3) +
+			 mp_sizeof_str(1) + mp_sizeof_uint(4) + new_opts_sz;
+
+	char *key_begin = (char*) region_alloc(&fiber()->gc, key_len + op_sz);
+	if (key_begin == NULL) {
+		diag_set(OutOfMemory, key_len, "region_alloc", "key_begin");
+		return SQL_TARANTOOL_ERROR;
+	}
+	char *key = mp_encode_array(key_begin, 2);
+	key = mp_encode_uint(key, def->space_id);
+	key = mp_encode_uint(key, iid);
+
+	char *op_begin = key;
+	char *op = mp_encode_array(op_begin, 1);
+	op = mp_encode_array(op, 3);
+	op = mp_encode_str(op, "=", 1);
+	op = mp_encode_uint(op, 4);
+	op += tarantoolSqlite3MakeIdxOpts(def->opts.is_unique, *sql_stmt, op);
+
+	if (box_update(BOX_INDEX_ID, 0, key_begin, key, op_begin, op,
+		       0, NULL) != 0)
+		return SQL_TARANTOOL_ERROR;
+
+	return SQLITE_OK;
+}
+
+int
 tarantoolSqlite3IdxKeyCompare(struct BtCursor *cursor,
 			      struct UnpackedRecord *unpacked)
 {
@@ -1484,22 +1524,11 @@ int tarantoolSqlite3MakeIdxParts(SqliteIndex *pIndex, void *buf)
 	return p - base;
 }
 
-/*
- * Format "opts" dictionary for _index entry.
- * Returns result size.
- * If buf==NULL estimate result size.
- *
- * Ex: {
- *   "unique": "true",
- *   "sql": "CREATE INDEX student_by_name ON students(name)"
- * }
- */
-int tarantoolSqlite3MakeIdxOpts(SqliteIndex *index, const char *zSql, void *buf)
+int
+tarantoolSqlite3MakeIdxOpts(bool is_unique, const char *zSql, void *buf)
 {
 	const struct Enc *enc = get_enc(buf);
 	char *base = buf, *p;
-
-	(void)index;
 
 	p = enc->encode_map(base, 2);
 	/* Mark as unique pk and unique indexes */
@@ -1511,7 +1540,7 @@ int tarantoolSqlite3MakeIdxOpts(SqliteIndex *index, const char *zSql, void *buf)
 	 * INSERT OR REPLACE/IGNORE uniqueness checks will be also done by
 	 * Tarantool.
 	 */
-	p = enc->encode_bool(p, IsUniqueIndex(index));
+	p = enc->encode_bool(p, is_unique);
 	p = enc->encode_str(p, "sql", 3);
 	p = enc->encode_str(p, zSql, zSql ? strlen(zSql) : 0);
 	return (int)(p - base);
