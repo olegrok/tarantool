@@ -2537,7 +2537,6 @@ struct NameContext {
  *
  */
 #define NC_AllowAgg  0x0001	/* Aggregate functions are allowed here */
-#define NC_PartIdx   0x0002	/* True if resolving a partial index WHERE */
 #define NC_IsCheck   0x0004	/* True if resolving names in a CHECK constraint */
 #define NC_InAggFunc 0x0008	/* True if analyzing arguments to an agg func */
 #define NC_HasAgg    0x0010	/* One or more aggregate functions seen */
@@ -3864,15 +3863,6 @@ sql_generate_row_delete(struct Parse *parse, struct Table *table,
  * table table and pointing to the entry that needs indexing.
  * cursor must be the cursor of the PRIMARY KEY index.
  *
- * If part_idx_label is not NULL, fill it in with a label and
- * jump to that label if index is a partial index that should be
- * skipped. The label should be resolved using
- * sql_resolve_part_idx_label(). A partial index should be skipped
- * if its WHERE clause evaluates to false or null.  If index is
- * not a partial index, *part_idx_label will be set to zero which
- * is an empty label that is ignored by
- * sql_resolve_part_idx_label().
- *
  * The prev and reg_prev parameters are used to implement a
  * cache to avoid unnecessary register loads.  If prev is not
  * NULL, then it is a pointer to a different index for which an
@@ -3889,8 +3879,6 @@ sql_generate_row_delete(struct Parse *parse, struct Table *table,
  * @param index The index for which to generate a key.
  * @param cursor Cursor number from which to take column data.
  * @param reg_out Put the new key into this register if not NULL.
- * @param[out] part_idx_label Jump to this label to skip partial
- *        index.
  * @param prev Previously generated index key
  * @param reg_prev Register holding previous generated key.
  *
@@ -3901,8 +3889,7 @@ sql_generate_row_delete(struct Parse *parse, struct Table *table,
  */
 int
 sql_generate_index_key(struct Parse *parse, struct Index *index, int cursor,
-		       int reg_out, int *part_idx_label, struct Index *prev,
-		       int reg_prev);
+		       int reg_out, struct Index *prev, int reg_prev);
 
 /**
  * If a prior call to sql_generate_index_key() generated a

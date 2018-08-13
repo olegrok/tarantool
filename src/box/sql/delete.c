@@ -582,13 +582,9 @@ sql_generate_row_delete(struct Parse *parse, struct Table *table,
 
 int
 sql_generate_index_key(struct Parse *parse, struct Index *index, int cursor,
-		       int reg_out, int *part_idx_label, struct Index *prev,
-		       int reg_prev)
+		       int reg_out, struct Index *prev, int reg_prev)
 {
 	struct Vdbe *v = parse->pVdbe;
-
-	if (part_idx_label != NULL)
-		*part_idx_label = 0;
 	int col_cnt = index->def->key_def->part_count;
 	int reg_base = sqlite3GetTempRange(parse, col_cnt);
 	if (prev != NULL && reg_base != reg_prev)

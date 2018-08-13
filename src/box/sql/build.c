@@ -2512,7 +2512,6 @@ sqlite3RefillIndex(Parse * pParse, Index * pIndex)
 	int iSorter;		/* Cursor opened by OpenSorter (if in use) */
 	int addr1;		/* Address of top of loop */
 	int addr2;		/* Address to jump to for next iteration */
-	int iPartIdxLabel;	/* Jump to this label to skip a row */
 	Vdbe *v;		/* Generate code into this virtual machine */
 	int regRecord;		/* Register holding assembled index record */
 	sqlite3 *db = pParse->db;	/* The database connection */
@@ -2538,10 +2537,8 @@ sqlite3RefillIndex(Parse * pParse, Index * pIndex)
 	VdbeCoverage(v);
 	regRecord = sqlite3GetTempReg(pParse);
 
-	sql_generate_index_key(pParse, pIndex, iTab, regRecord,
-			       &iPartIdxLabel, NULL, 0);
+	sql_generate_index_key(pParse, pIndex, iTab, regRecord, NULL, 0);
 	sqlite3VdbeAddOp2(v, OP_SorterInsert, iSorter, regRecord);
-	sql_resolve_part_idx_label(pParse, iPartIdxLabel);
 	sqlite3VdbeAddOp2(v, OP_Next, iTab, addr1 + 1);
 	VdbeCoverage(v);
 	sqlite3VdbeJumpHere(v, addr1);
