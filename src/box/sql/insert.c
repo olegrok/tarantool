@@ -58,23 +58,6 @@ sqlite3OpenTable(Parse * pParse,	/* Generate code into this VDBE */
 	VdbeComment((v, "%s", pTab->def->name));
 }
 
-/*
- * Return a pointer to the column affinity string associated with index
- * pIdx. A column affinity string has one character for each column in
- * the table, according to the affinity of the column:
- *
- *  Character      Column affinity
- *  ------------------------------
- *  'A'            BLOB
- *  'B'            TEXT
- *  'C'            NUMERIC
- *  'D'            INTEGER
- *  'F'            REAL
- *
- * Memory for the buffer containing the column index affinity string
- * is managed along with the rest of the Index structure. It will be
- * released when sqlite3DeleteIndex() is called.
- */
 char *
 sql_index_affinity_str(struct sqlite3 *db, struct index_def *def)
 {
@@ -91,15 +74,14 @@ sql_index_affinity_str(struct sqlite3 *db, struct index_def *def)
 	 */
 	if (space->def->fields == NULL) {
 		memset(aff, AFFINITY_BLOB, column_count);
-		goto exit;
+	} else {
+		for (uint32_t i = 0; i < column_count; i++) {
+			uint32_t x = def->key_def->parts[i].fieldno;
+			aff[i] = space->def->fields[x].affinity;
+			if (aff[i] == AFFINITY_UNDEFINED)
+				aff[i] = AFFINITY_BLOB;
+		}
 	}
-	for (uint32_t i = 0; i < column_count; i++) {
-		uint32_t x = def->key_def->parts[i].fieldno;
-		aff[i] = space->def->fields[x].affinity;
-		if (aff[i] == AFFINITY_UNDEFINED)
-			aff[i] = AFFINITY_BLOB;
-	}
-exit:
 	aff[column_count] = '\0';
 	return aff;
 }

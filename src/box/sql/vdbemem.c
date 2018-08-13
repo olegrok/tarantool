@@ -1552,8 +1552,7 @@ sqlite3Stat4ProbeSetValue(Parse * pParse,	/* Parse context */
 			sqlite3_value *pVal = 0;
 			Expr *pElem =
 			    (pExpr ? sqlite3VectorFieldSubexpr(pExpr, i) : 0);
-			u8 aff =
-				sql_index_part_affinity(pIdx->def, iVal + i);
+			u8 aff = sql_index_part_affinity(pIdx->def, iVal + i);
 			alloc.iVal = iVal + i;
 			rc = stat4ValueFromExpr(pParse, pElem, aff, &alloc,
 						&pVal);
