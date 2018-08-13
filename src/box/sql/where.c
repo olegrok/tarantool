@@ -2971,10 +2971,9 @@ whereLoopAddBtree(WhereLoopBuilder * pBuilder,	/* WHERE clause information */
 				 * indexes on subqueries and views.
 				 */
 				pNew->rSetup = rLogSize + rSize + 4;
-				if (pTab->pSelect == 0
-				    && (pTab->tabFlags & TF_Ephemeral) == 0) {
+				if (!pTab->def->opts.is_view &&
+				    pTab->def->id == 0)
 					pNew->rSetup += 24;
-				}
 				if (pNew->rSetup < 0)
 					pNew->rSetup = 0;
 				/* TUNING: Each index lookup yields 20 rows in the table.  This
