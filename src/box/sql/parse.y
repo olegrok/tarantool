@@ -1457,19 +1457,6 @@ cmd ::= ALTER TABLE fullname(X) DROP CONSTRAINT nm(Z). {
     sql_drop_foreign_key(pParse, X, &Z);
 }
 
-/* gh-3075: Commented until ALTER ADD COLUMN is implemeneted.  */
-/* cmd ::= ALTER TABLE add_column_fullname */
-/*         ADD kwcolumn_opt columnname(Y) carglist. { */
-/*   Y.n = (int)(pParse->sLastToken.z-Y.z) + pParse->sLastToken.n; */
-/*   sqlite3AlterFinishAddColumn(pParse, &Y); */
-/* } */
-/* add_column_fullname ::= fullname(X). { */
-/*   disableLookaside(pParse); */
-/*   sqlite3AlterBeginAddColumn(pParse, X); */
-/* } */
-/* kwcolumn_opt ::= . */
-/* kwcolumn_opt ::= COLUMNKW. */
-
 //////////////////////// COMMON TABLE EXPRESSIONS ////////////////////////////
 %type with {With*}
 %type wqlist {With*}
