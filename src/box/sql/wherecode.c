@@ -1626,8 +1626,7 @@ sqlite3WhereCodeOneLoopStart(WhereInfo * pWInfo,	/* Complete information about t
 					assert((pSubLoop->wsFlags & WHERE_AUTO_INDEX) == 0);
 					if ((pSubLoop->wsFlags & WHERE_INDEXED) != 0
 					    && (ii == 0 || pSubLoop->pIndex == pCov)
-					    && (!sql_index_is_primary(pSubLoop->pIndex))
-					    ) {
+					    && !sql_index_is_primary(pSubLoop->pIndex)) {
 						assert(pSubWInfo->a[0].
 						       iIdxCur == iCovCur);
 						pCov = pSubLoop->pIndex;

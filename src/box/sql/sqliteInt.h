@@ -1991,10 +1991,6 @@ enum sql_index_type {
 bool
 sql_index_is_primary(const struct Index *idx);
 
-/** Simple getter around opts.is_unique. */
-bool
-sql_index_is_unique(const struct Index *idx);
-
 /*
  * Each SQL index is represented in memory by an
  * instance of the following structure.

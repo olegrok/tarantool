@@ -1511,7 +1511,7 @@ int tarantoolSqlite3MakeIdxOpts(SqliteIndex *index, const char *zSql, void *buf)
 	 * INSERT OR REPLACE/IGNORE uniqueness checks will be also done by
 	 * Tarantool.
 	 */
-	p = enc->encode_bool(p, sql_index_is_unique(index));
+	p = enc->encode_bool(p, index->def->opts.is_unique);
 	p = enc->encode_str(p, "sql", 3);
 	p = enc->encode_str(p, zSql, zSql ? strlen(zSql) : 0);
 	return (int)(p - base);

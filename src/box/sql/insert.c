@@ -1177,7 +1177,7 @@ sqlite3GenerateConstraintChecks(Parse * pParse,		/* The parser context */
 			sqlite3VdbeResolveLabel(v, addrUniqueOk);
 			continue;
 		}
-		if (!sql_index_is_unique(pIdx)) {
+		if (!pIdx->def->opts.is_unique) {
 			sqlite3VdbeResolveLabel(v, addrUniqueOk);
 			continue;
 		}
@@ -1463,8 +1463,7 @@ sqlite3OpenTableAndIndices(Parse * pParse,	/* Parsing context */
 		 * iteration and don't open new index cursor
 		 */
 
-		if (isUpdate ||
-		    ! rlist_empty(&space->parent_fkey) ||
+		if (isUpdate || !rlist_empty(&space->parent_fkey) ||
 		    sql_index_is_primary(pIdx) ||
 		    /* Condition 4 */
 		    (pIdx->def->opts.is_unique &&

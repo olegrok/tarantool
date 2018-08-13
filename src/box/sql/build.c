@@ -420,10 +420,8 @@ sqlite3CheckIdentifierName(Parse *pParse, char *zName)
 Index *
 sqlite3PrimaryKeyIndex(Table * pTab)
 {
-	Index *p;
-	for (p = pTab->pIndex; p != NULL && !sql_index_is_primary(p);
-	     p = p->pNext);
-	return p;
+	assert(pTab->pIndex == NULL || sql_index_is_primary(pTab->pIndex));
+	return pTab->pIndex;
 }
 
 /**
@@ -2524,7 +2522,7 @@ sqlite3RefillIndex(Parse * pParse, Index * pIndex)
 
 	addr1 = sqlite3VdbeAddOp2(v, OP_SorterSort, iSorter, 0);
 	VdbeCoverage(v);
-	if (sql_index_is_unique(pIndex)) {
+	if (pIndex->def->opts.is_unique) {
 		int j2 = sqlite3VdbeCurrentAddr(v) + 3;
 		sqlite3VdbeGoto(v, j2);
 		addr2 = sqlite3VdbeCurrentAddr(v);
@@ -2724,12 +2722,6 @@ bool
 sql_index_is_primary(const struct Index *idx)
 {
 	return idx->def->iid == 0;
-}
-
-bool
-sql_index_is_unique(const struct Index *idx)
-{
-	return idx->def->opts.is_unique;
 }
 
 void
