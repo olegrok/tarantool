@@ -3918,10 +3918,11 @@ sql_resolve_part_idx_label(struct Parse *parse, int label);
  * @param upd_cols Columns to be updated with the size of table's
  *                 field count. NULL for INSERT operation.
  */
-void vdbe_emit_constraint_checks(struct Parse *parse_context,
-				 struct Table *tab, int new_tuple_reg,
-				 enum on_conflict_action on_conflict,
-				 int ignore_label, int *upd_cols);
+void
+vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
+			    int new_tuple_reg,
+			    enum on_conflict_action on_conflict,
+			    int ignore_label, int *upd_cols);
 /**
  * This routine generates code to finish the INSERT or UPDATE
  * operation that was started by a prior call to
@@ -3932,7 +3933,7 @@ void vdbe_emit_constraint_checks(struct Parse *parse_context,
  *
  * @param v Virtual database engine.
  * @param cursor_id Primary index cursor.
- * @param tuple_reg Register with raw data to insert.
+ * @param raw_data_reg Register with raw data to insert.
  * @param tuple_len Number of registers to hold the tuple.
  * @param on_conflict On conflict action.
  */

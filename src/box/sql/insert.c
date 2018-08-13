@@ -868,13 +868,15 @@ vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
 		if (on_conflict_nullable == ON_CONFLICT_ACTION_REPLACE &&
 		    dflt == NULL)
 			on_conflict_nullable = ON_CONFLICT_ACTION_ABORT;
+		char *err_msg;
+		int addr;
 		switch (on_conflict_nullable) {
 		case ON_CONFLICT_ACTION_ABORT:
 			sqlite3MayAbort(parse_context);
 		case ON_CONFLICT_ACTION_ROLLBACK:
-		case ON_CONFLICT_ACTION_FAIL: {
-			char *err_msg = sqlite3MPrintf(db, "%s.%s", def->name,
-						       def->fields[i].name);
+		case ON_CONFLICT_ACTION_FAIL:
+			err_msg = sqlite3MPrintf(db, "%s.%s", def->name,
+						 def->fields[i].name);
 			sqlite3VdbeAddOp3(v, OP_HaltIfNull,
 					  SQLITE_CONSTRAINT_NOTNULL,
 					  on_conflict_nullable,
@@ -882,20 +884,16 @@ vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
 			sqlite3VdbeAppendP4(v, err_msg, P4_DYNAMIC);
 			sqlite3VdbeChangeP5(v, P5_ConstraintNotNull);
 			break;
-		}
-		case ON_CONFLICT_ACTION_IGNORE: {
+		case ON_CONFLICT_ACTION_IGNORE:
 			sqlite3VdbeAddOp2(v, OP_IsNull, new_tuple_reg + i,
 					  ignore_label);
 			break;
-		}
-		case ON_CONFLICT_ACTION_REPLACE: {
-			int addr1 = sqlite3VdbeAddOp1(v, OP_NotNull,
+		case ON_CONFLICT_ACTION_REPLACE:
+			addr = sqlite3VdbeAddOp1(v, OP_NotNull,
 						  new_tuple_reg + i);
-			sqlite3ExprCode(parse_context, dflt,
-					new_tuple_reg + i);
-			sqlite3VdbeJumpHere(v, addr1);
+			sqlite3ExprCode(parse_context, dflt, new_tuple_reg + i);
+			sqlite3VdbeJumpHere(v, addr);
 			break;
-		}
 		default:
 			unreachable();
 		}
@@ -908,6 +906,9 @@ vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
 		on_conflict = ON_CONFLICT_ACTION_ABORT;
 	/* Test all CHECK constraints. */
 	struct ExprList *checks = space_checks_expr_list(tab->def->id);
+	enum on_conflict_action on_conflict_check = on_conflict;
+	if (on_conflict == ON_CONFLICT_ACTION_REPLACE)
+		on_conflict_check = ON_CONFLICT_ACTION_ABORT;
 	if (checks != NULL &&
 	    (user_session->sql_flags & SQLITE_IgnoreChecks) == 0) {
 		parse_context->ckBase = new_tuple_reg;
@@ -925,11 +926,6 @@ vdbe_emit_constraint_checks(struct Parse *parse_context, struct Table *tab,
 				char *name = checks->a[i].zName;
 				if (name == NULL)
 					name = def->name;
-				enum on_conflict_action on_conflict_check =
-					on_conflict;
-				if (on_conflict == ON_CONFLICT_ACTION_REPLACE)
-					on_conflict_check =
-						ON_CONFLICT_ACTION_ABORT;
 				sqlite3HaltConstraint(parse_context,
 						      SQLITE_CONSTRAINT_CHECK,
 						      on_conflict_check, name,
