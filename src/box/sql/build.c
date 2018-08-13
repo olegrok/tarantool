@@ -3896,8 +3896,6 @@ sqlite3Reindex(Parse * pParse, Token * pName1, Token * pName2)
 		goto exit_reindex;
 	}
 
-
-
 	sqlite3ErrorMsg(pParse,
 			"unable to identify the object to be reindexed");
 
