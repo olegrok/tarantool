@@ -560,6 +560,7 @@ sql_delete_by_key(struct space *space, uint32_t iid, char *key,
 	request.key_end = key + key_size;
 	request.space_id = space->def->id;
 	request.index_id = iid;
+	assert(space_index(space, iid)->def->opts.is_unique);
 	int rc = box_process_rw(&request, space, &unused);
 
 	return rc == 0 ? SQLITE_OK : SQL_TARANTOOL_DELETE_FAIL;
