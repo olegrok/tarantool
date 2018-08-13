@@ -128,13 +128,11 @@ void
 sql_emit_table_affinity(struct Vdbe *v, struct space_def *def, int reg)
 {
 	assert(reg > 0);
-	sqlite3 *db = sqlite3VdbeDb(v);
+	struct sqlite3 *db = sqlite3VdbeDb(v);
 	uint32_t field_count = def->field_count;
-	char *colls_aff = (char *)sqlite3DbMallocZero(db, field_count + 1);
-	if (colls_aff == NULL) {
-		sqlite3OomFault(db);
+	char *colls_aff = (char *) sqlite3DbMallocZero(db, field_count + 1);
+	if (colls_aff == NULL)
 		return;
-	}
 	for (uint32_t i = 0; i < field_count; ++i)
 		colls_aff[i] = def->fields[i].affinity;
 	sqlite3VdbeAddOp4(v, OP_Affinity, reg, field_count, 0, colls_aff,
