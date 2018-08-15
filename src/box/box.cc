@@ -634,6 +634,8 @@ box_set_replication(void)
 	box_sync_replication(true);
 	/* Follow replica */
 	replicaset_follow();
+	/* Sync replica up to quorum */
+	replicaset_sync();
 }
 
 void
