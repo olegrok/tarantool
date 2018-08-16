@@ -51,7 +51,7 @@ RUN set -x && \
     cd curl && \
     git checkout curl-7_59_0 && \
     ./buildconf && \
-    LIBS="-ldl" ./configure --enable-static --enable-shared --with-ssl && \
+    LIBS=" -lssl -lcrypto -ldl" ./configure --enable-static --enable-shared --with-ssl && \
     make -j && make install
 
 RUN set -x &&\
