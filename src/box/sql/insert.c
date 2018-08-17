@@ -739,9 +739,7 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 			if (j < 0 || nColumn == 0
 			    || (pColumn && j >= pColumn->nId)) {
 				if (i == pTab->iAutoIncPKey) {
-					sqlite3VdbeAddOp2(v,
-							  OP_NextAutoincValue,
-							  pTab->def->id,
+					sqlite3VdbeAddOp2(v, OP_Null, 0,
 							  iRegStore);
 					continue;
 				}
@@ -824,7 +822,14 @@ sqlite3Insert(Parse * pParse,	/* Parser context */
 						iRegStore);
 			}
 		}
-
+		/*
+		 * Replace NULL in PK with autoincrement by
+		 * generated value.
+		 */
+		if (pTab->iAutoIncPKey >= 0) {
+			sqlite3VdbeAddOp2(v, OP_NextAutoincValue, pTab->def->id,
+					  regData + pTab->iAutoIncPKey);
+		}
 		/* Generate code to check constraints and generate index keys
 		   and do the insertion.
 		 */
