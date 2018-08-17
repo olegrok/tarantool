@@ -225,20 +225,22 @@ sql_trigger_finish(struct Parse *parse, struct TriggerStep *step_list,
 		parse->nMem += 3;
 		int record = ++parse->nMem;
 
-		opts_buff =
-			sqlite3DbMallocRaw(parse->db,
-					   tarantoolSqlite3MakeTableOpts(0,
-									 sql_str,
-									 NULL) +
-					   1);
-		if (db->mallocFailed)
+		uint32_t opts_buff_sz = 0;
+		char *data = sql_encode_table_opts(&fiber()->gc, NULL, sql_str,
+						   &opts_buff_sz);
+		if (data != NULL) {
+			opts_buff = sqlite3DbMallocRaw(parse->db, opts_buff_sz);
+			if (opts_buff != NULL)
+				memcpy(opts_buff, data, opts_buff_sz);
+		} else {
+			parse->nErr++;
+			parse->rc = SQL_TARANTOOL_ERROR;
+		}
+		if (opts_buff == NULL)
 			goto triggerfinish_cleanup;
 
-		int opts_buff_sz =
-			tarantoolSqlite3MakeTableOpts(0, sql_str, opts_buff);
-
 		trigger_name = sqlite3DbStrDup(parse->db, trigger_name);
-		if (db->mallocFailed)
+		if (trigger_name == NULL)
 			goto triggerfinish_cleanup;
 
 		sqlite3VdbeAddOp4(v,

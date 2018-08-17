@@ -56,6 +56,8 @@
 #include "xrow.h"
 #include "iproto_constants.h"
 #include "fkey.h"
+#include "mpstream.h"
+#include "small/region.h"
 
 static sqlite3 *db = NULL;
 
@@ -1190,66 +1192,6 @@ void tarantoolSqlite3LoadSchema(struct init_data *init)
  */
 
 /*
- * Resulting data is of the variable length. Routines are called twice:
- *  1. with a NULL buffer, yielding result size estimation;
- *  2. with a buffer of the estimated size, rendering the result.
- *
- * For convenience, formatting routines use Enc structure to call
- * Enc is either configured to perform size estimation
- * or to render the result.
- */
-struct Enc {
-	char *(*encode_uint)(char *data, uint64_t num);
-	char *(*encode_str)(char *data, const char *str, uint32_t len);
-	char *(*encode_bool)(char *data, bool v);
-	char *(*encode_array)(char *data, uint32_t len);
-	char *(*encode_map)(char *data, uint32_t len);
-};
-
-/* no_encode_XXX functions estimate result size */
-
-static char *no_encode_uint(char *data, uint64_t num)
-{
-	/* MsgPack UINT is encoded in 9 bytes or less */
-	(void)num; return data + 9;
-}
-
-static char *no_encode_str(char *data, const char *str, uint32_t len)
-{
-	/* MsgPack STR header is encoded in 5 bytes or less, followed by
-	 * the string data. */
-	(void)str; return data + 5 + len;
-}
-
-static char *no_encode_bool(char *data, bool v)
-{
-	/* MsgPack BOOL is encoded in 1 byte. */
-	(void)v; return data + 1;
-}
-
-static char *no_encode_array_or_map(char *data, uint32_t len)
-{
-	/* MsgPack ARRAY or MAP header is encoded in 5 bytes or less. */
-	(void)len; return data + 5;
-}
-
-/*
- * If buf==NULL, return Enc that will perform size estimation;
- * otherwize, return Enc that renders results in the provided buf.
- */
-static const struct Enc *get_enc(void *buf)
-{
-	static const struct Enc mp_enc = {
-		mp_encode_uint, mp_encode_str, mp_encode_bool,
-		mp_encode_array, mp_encode_map
-	}, no_enc = {
-		no_encode_uint, no_encode_str, no_encode_bool,
-		no_encode_array_or_map, no_encode_array_or_map
-	};
-	return buf ? &mp_enc : &no_enc;
-}
-
-/*
  * Convert SQLite affinity value to the corresponding Tarantool type
  * string which is suitable for _index.parts field.
  */
@@ -1278,34 +1220,38 @@ static const char *convertSqliteAffinity(int affinity, bool allow_nulls)
 	}
 }
 
-/*
- * Render "format" array for _space entry.
- * Returns result size.
- * If buf==NULL estimate result size.
- *
- * Ex: [{"name": "col1", "type": "integer"}, ... ]
- */
-int tarantoolSqlite3MakeTableFormat(Table *pTable, void *buf)
+static void
+set_encode_error(void *error_ctx)
 {
-	const struct Enc *enc = get_enc(buf);
-	const struct space_def *def = pTable->def;
+	bool *is_error = error_ctx;
+	*is_error = true;
+}
+
+char *
+sql_encode_table(struct region *region, struct Table *table, uint32_t *size)
+{
+	size_t used = region_used(region);
+	struct mpstream stream;
+	bool is_error = false;
+	mpstream_init(&stream, region, region_reserve_cb, region_alloc_cb,
+		      set_encode_error, &is_error);
+
+	const struct space_def *def = table->def;
 	assert(def != NULL);
-	struct SqliteIndex *pk_idx = sqlite3PrimaryKeyIndex(pTable);
-	int pk_forced_int = -1;
-	char *base = buf, *p;
-	int i, n = def->field_count;
-
-	p = enc->encode_array(base, n);
-
-	/* If table's PK is single column which is INTEGER, then
-	 * treat it as strict type, not affinity.  */
+	/*
+	 * If table's PK is single column which is INTEGER, then
+	 * treat it as strict type, not affinity.
+	 */
+	struct SqliteIndex *pk_idx = sqlite3PrimaryKeyIndex(table);
+	uint32_t pk_forced_int = UINT32_MAX;
 	if (pk_idx != NULL && pk_idx->def->key_def->part_count == 1) {
 		int pk = pk_idx->def->key_def->parts[0].fieldno;
 		if (def->fields[pk].type == FIELD_TYPE_INTEGER)
 			pk_forced_int = pk;
 	}
-
-	for (i = 0; i < n; i++) {
+	uint32_t field_count = def->field_count;
+	mpstream_encode_array(&stream, field_count);
+	for (uint32_t i = 0; i < field_count && !is_error; i++) {
 		const char *t;
 		uint32_t cid = def->fields[i].coll_id;
 		struct field_def *field = &def->fields[i];
@@ -1315,10 +1261,10 @@ int tarantoolSqlite3MakeTableFormat(Table *pTable, void *buf)
 			base_len += 1;
 		if (default_str != NULL)
 			base_len += 1;
-		p = enc->encode_map(p, base_len);
-		p = enc->encode_str(p, "name", 4);
-		p = enc->encode_str(p, field->name, strlen(field->name));
-		p = enc->encode_str(p, "type", 4);
+		mpstream_encode_map(&stream, base_len);
+		mpstream_encode_str(&stream, "name", strlen("name"));
+		mpstream_encode_str(&stream, field->name, strlen(field->name));
+		mpstream_encode_str(&stream, "type", strlen("type"));
 		if (i == pk_forced_int) {
 			t = "integer";
 		} else {
@@ -1329,108 +1275,154 @@ int tarantoolSqlite3MakeTableFormat(Table *pTable, void *buf)
 		}
 
 		assert(def->fields[i].is_nullable ==
-			       action_is_nullable(def->fields[i].nullable_action));
-		p = enc->encode_str(p, t, strlen(t));
-		p = enc->encode_str(p, "affinity", 8);
-		p = enc->encode_uint(p, def->fields[i].affinity);
-		p = enc->encode_str(p, "is_nullable", 11);
-		p = enc->encode_bool(p, def->fields[i].is_nullable);
-		p = enc->encode_str(p, "nullable_action", 15);
+			       action_is_nullable(def->fields[i].
+						  nullable_action));
+		mpstream_encode_str(&stream, t, strlen(t));
+		mpstream_encode_str(&stream, "affinity", strlen("affinity"));
+		mpstream_encode_uint(&stream,
+				  def->fields[i].affinity);
+		mpstream_encode_str(&stream, "is_nullable",
+				    strlen("is_nullable"));
+		mpstream_encode_bool(&stream,
+				  def->fields[i].is_nullable);
+		mpstream_encode_str(&stream, "nullable_action",
+				    strlen("nullable_action"));
 		assert(def->fields[i].nullable_action < on_conflict_action_MAX);
 		const char *action =
 			on_conflict_action_strs[def->fields[i].nullable_action];
-		p = enc->encode_str(p, action, strlen(action));
+		mpstream_encode_str(&stream, action, strlen(action));
 		if (cid != COLL_NONE) {
-			p = enc->encode_str(p, "collation", strlen("collation"));
-			p = enc->encode_uint(p, cid);
+			mpstream_encode_str(&stream, "collation",
+					    strlen("collation"));
+			mpstream_encode_uint(&stream, cid);
 		}
 		if (default_str != NULL) {
-		        p = enc->encode_str(p, "default", strlen("default"));
-			p = enc->encode_str(p, default_str, strlen(default_str));
+			mpstream_encode_str(&stream, "default",
+					    strlen("default"));
+			mpstream_encode_str(&stream, default_str,
+					    strlen(default_str));
 		}
 	}
-	return (int)(p - base);
+	mpstream_flush(&stream);
+	if (is_error)
+		return NULL;
+	uint32_t sz = region_used(region) - used;
+	char *raw = region_join(region, sz);
+	if (raw == NULL)
+		diag_set(OutOfMemory, sz, "region_join", "raw");
+	else
+		*size = sz;
+	return raw;
 }
 
-/*
- * Format "opts" dictionary for _space entry.
- * Returns result size.
- * If buf==NULL estimate result size.
- *
- * Ex: {"temporary": true, "sql": "CREATE TABLE student (name, grade)"}
- */
-int
-tarantoolSqlite3MakeTableOpts(Table *pTable, const char *zSql, char *buf)
+char *
+sql_encode_table_opts(struct region *region, struct Table *table,
+		      const char *sql, uint32_t *size)
 {
-	const struct Enc *enc = get_enc(buf);
-	bool is_view = pTable != NULL && pTable->def->opts.is_view;
-	bool has_checks = pTable != NULL && pTable->def->opts.checks != NULL;
-	int checks_cnt = has_checks ? pTable->def->opts.checks->nExpr : 0;
-	char *p = enc->encode_map(buf, 1 + is_view + (checks_cnt > 0));
+	assert(sql != NULL);
+	size_t used = region_used(region);
+	struct mpstream stream;
+	bool is_error = false;
+	mpstream_init(&stream, region, region_reserve_cb, region_alloc_cb,
+		      set_encode_error, &is_error);
+	bool is_view = false;
+	bool has_checks = false;
+	if (table != NULL) {
+		is_view = table->def->opts.is_view;
+		has_checks =  table->def->opts.checks != NULL;
+	}
+	uint32_t checks_cnt = has_checks ? table->def->opts.checks->nExpr : 0;
+	mpstream_encode_map(&stream, 1 + is_view + (checks_cnt > 0));
 
-	p = enc->encode_str(p, "sql", 3);
-	p = enc->encode_str(p, zSql, strlen(zSql));
+	mpstream_encode_str(&stream, "sql", strlen("sql"));
+	mpstream_encode_str(&stream, sql, strlen(sql));
 	if (is_view) {
-		p = enc->encode_str(p, "view", 4);
-		p = enc->encode_bool(p, true);
+		mpstream_encode_str(&stream, "view", strlen("view"));
+		mpstream_encode_bool(&stream, true);
 	}
 	if (checks_cnt == 0)
-		return p - buf;
+		goto finish;
+
 	/* Encode checks. */
-	struct ExprList_item *a = pTable->def->opts.checks->a;
-	p = enc->encode_str(p, "checks", 6);
-	p = enc->encode_array(p, checks_cnt);
-	for (int i = 0; i < checks_cnt; ++i) {
+	struct ExprList_item *a = table->def->opts.checks->a;
+	mpstream_encode_str(&stream, "checks", strlen("checks"));
+	mpstream_encode_array(&stream, checks_cnt);
+	for (uint32_t i = 0; i < checks_cnt && !is_error; ++i) {
 		int items = (a[i].pExpr != NULL) + (a[i].zName != NULL);
-		p = enc->encode_map(p, items);
+		mpstream_encode_map(&stream, items);
 		/*
 		 * a[i].pExpr could be NULL for VIEW column names
 		 * represented as checks.
 		 */
 		if (a[i].pExpr != NULL) {
-			Expr *pExpr = a[i].pExpr;
+			struct Expr *pExpr = a[i].pExpr;
 			assert(pExpr->u.zToken != NULL);
-			p = enc->encode_str(p, "expr", 4);
-			p = enc->encode_str(p, pExpr->u.zToken,
+			mpstream_encode_str(&stream, "expr", strlen("expr"));
+			mpstream_encode_str(&stream, pExpr->u.zToken,
 					    strlen(pExpr->u.zToken));
 		}
 		if (a[i].zName != NULL) {
-			p = enc->encode_str(p, "name", 4);
-			p = enc->encode_str(p, a[i].zName, strlen(a[i].zName));
+			mpstream_encode_str(&stream, "name", strlen("name"));
+			mpstream_encode_str(&stream, a[i].zName,
+					    strlen(a[i].zName));
 		}
 	}
-	return p - buf;
+
+finish:
+	mpstream_flush(&stream);
+	if (is_error)
+		return NULL;
+	uint32_t sz = region_used(region) - used;
+	char *raw = region_join(region, sz);
+	if (raw == NULL)
+		diag_set(OutOfMemory, sz, "region_join", "raw");
+	else
+		*size = sz;
+	return raw;
 }
 
-int
-fkey_encode_links(const struct fkey_def *def, int type, char *buf)
+char *
+fkey_encode_links(struct region *region, const struct fkey_def *def, int type,
+		  uint32_t *size)
 {
-	const struct Enc *enc = get_enc(buf);
-	char *p = enc->encode_array(buf, def->field_count);
-	for (uint32_t i = 0; i < def->field_count; ++i)
-		p = enc->encode_uint(p, def->links[i].fields[type]);
-	return p - buf;
+	size_t used = region_used(region);
+	struct mpstream stream;
+	bool is_error = false;
+	mpstream_init(&stream, region, region_reserve_cb, region_alloc_cb,
+		      set_encode_error, &is_error);
+	uint32_t field_count = def->field_count;
+	mpstream_encode_array(&stream, field_count);
+	for (uint32_t i = 0; i < field_count && !is_error; ++i)
+		mpstream_encode_uint(&stream, def->links[i].fields[type]);
+	mpstream_flush(&stream);
+	if (is_error)
+		return NULL;
+	uint32_t sz = region_used(region) - used;
+	char *raw = region_join(region, sz);
+	if (raw == NULL)
+		diag_set(OutOfMemory, sz, "region_join", "raw");
+	else
+		*size = sz;
+	return raw;
 }
 
-/*
- * Format "parts" array for _index entry.
- * Returns result size.
- * If buf==NULL estimate result size.
- *
- * Ex: [[0, "integer"]]
- */
-int tarantoolSqlite3MakeIdxParts(SqliteIndex *pIndex, void *buf)
+char *
+sql_encode_index_parts(struct region *region, struct SqliteIndex *index,
+			uint32_t *size)
 {
-	struct field_def *fields = pIndex->pTable->def->fields;
-	struct key_def *key_def = pIndex->def->key_def;
-	const struct Enc *enc = get_enc(buf);
-	char *base = buf;
+	size_t used = region_used(region);
+	struct mpstream stream;
+	bool is_error = false;
+	mpstream_init(&stream, region, region_reserve_cb, region_alloc_cb,
+		      set_encode_error, &is_error);
+	/*
+	 * If table's PK is single column which is INTEGER, then
+	 * treat it as strict type, not affinity.
+	 */
 	uint32_t pk_forced_int = UINT32_MAX;
 	struct SqliteIndex *primary_index =
-		sqlite3PrimaryKeyIndex(pIndex->pTable);
-
-	/* If table's PK is single column which is INTEGER, then
-	 * treat it as strict type, not affinity.  */
+		sqlite3PrimaryKeyIndex(index->pTable);
+	struct field_def *fields = index->pTable->def->fields;
 	if (primary_index->def->key_def->part_count == 1) {
 		int pk = primary_index->def->key_def->parts[0].fieldno;
 		if (fields[pk].type == FIELD_TYPE_INTEGER)
@@ -1443,9 +1435,11 @@ int tarantoolSqlite3MakeIdxParts(SqliteIndex *pIndex, void *buf)
 	 * primary key columns. Query planner depends on this particular
 	 * data layout.
 	 */
+	struct key_def *key_def = index->def->key_def;
+	uint32_t part_count = key_def->part_count;
 	struct key_part *part = key_def->parts;
-	char *p = enc->encode_array(base, key_def->part_count);
-	for (uint32_t i = 0; i < key_def->part_count; ++i, ++part) {
+	mpstream_encode_array(&stream, part_count);
+	for (uint32_t i = 0; i < part_count; ++i, ++part) {
 		uint32_t col = part->fieldno;
 		assert(fields[col].is_nullable ==
 		       action_is_nullable(fields[col].nullable_action));
@@ -1456,54 +1450,60 @@ int tarantoolSqlite3MakeIdxParts(SqliteIndex *pIndex, void *buf)
 			t = convertSqliteAffinity(fields[col].affinity,
 						  fields[col].is_nullable);
 		}
-		/* do not decode default collation */
+		/* Do not decode default collation. */
 		uint32_t cid = part->coll_id;
-		p = enc->encode_map(p, cid == COLL_NONE ? 5 : 6);
-		p = enc->encode_str(p, "type", sizeof("type")-1);
-		p = enc->encode_str(p, t, strlen(t));
-		p = enc->encode_str(p, "field", sizeof("field")-1);
-		p = enc->encode_uint(p, col);
+		mpstream_encode_map(&stream, 5 + (cid != COLL_NONE));
+		mpstream_encode_str(&stream, "type", strlen("type"));
+		mpstream_encode_str(&stream, t, strlen(t));
+		mpstream_encode_str(&stream, "field", strlen("field"));
+		mpstream_encode_uint(&stream, col);
 		if (cid != COLL_NONE) {
-			p = enc->encode_str(p, "collation",
-					    sizeof("collation") - 1);
-			p = enc->encode_uint(p, cid);
+			mpstream_encode_str(&stream, "collation",
+					    strlen("collation"));
+			mpstream_encode_uint(&stream, cid);
 		}
-		p = enc->encode_str(p, "is_nullable", 11);
-		p = enc->encode_bool(p, fields[col].is_nullable);
-		p = enc->encode_str(p, "nullable_action", 15);
+		mpstream_encode_str(&stream, "is_nullable",
+				    strlen("is_nullable"));
+		mpstream_encode_bool(&stream,
+				  fields[col].is_nullable);
+		mpstream_encode_str(&stream, "nullable_action",
+				    strlen("nullable_action"));
 		const char *action_str =
 			on_conflict_action_strs[fields[col].nullable_action];
-		p = enc->encode_str(p, action_str, strlen(action_str));
+		mpstream_encode_str(&stream, action_str, strlen(action_str));
 
-		p = enc->encode_str(p, "sort_order", 10);
+		mpstream_encode_str(&stream, "sort_order",
+				    strlen("sort_order"));
 		enum sort_order sort_order = part->sort_order;
 		assert(sort_order < sort_order_MAX);
 		const char *sort_order_str = sort_order_strs[sort_order];
-		p = enc->encode_str(p, sort_order_str, strlen(sort_order_str));
+		mpstream_encode_str(&stream, sort_order_str,
+				    strlen(sort_order_str));
 	}
-	return p - base;
+	mpstream_flush(&stream);
+	if (is_error)
+		return NULL;
+	uint32_t sz = region_used(region) - used;
+	char *raw = region_join(region, sz);
+	if (raw == NULL)
+		diag_set(OutOfMemory, sz, "region_join", "raw");
+	else
+		*size = sz;
+	return raw;
 }
 
-/*
- * Format "opts" dictionary for _index entry.
- * Returns result size.
- * If buf==NULL estimate result size.
- *
- * Ex: {
- *   "unique": "true",
- *   "sql": "CREATE INDEX student_by_name ON students(name)"
- * }
- */
-int tarantoolSqlite3MakeIdxOpts(SqliteIndex *index, const char *zSql, void *buf)
+char *
+sql_encode_index_opts(struct region *region, struct SqliteIndex *index,
+		      const char *sql, uint32_t *size)
 {
-	const struct Enc *enc = get_enc(buf);
-	char *base = buf, *p;
-
-	(void)index;
-
-	p = enc->encode_map(base, 2);
+	size_t used = region_used(region);
+	struct mpstream stream;
+	bool is_error = false;
+	mpstream_init(&stream, region, region_reserve_cb, region_alloc_cb,
+		      set_encode_error, &is_error);
+	mpstream_encode_map(&stream, 1 + (sql != NULL));
 	/* Mark as unique pk and unique indexes */
-	p = enc->encode_str(p, "unique", 6);
+	mpstream_encode_str(&stream, "unique", strlen("unique"));
 	/* If user didn't defined ON CONFLICT OPTIONS, all uniqueness checks
 	 * will be made by Tarantool. However, Tarantool doesn't have ON
 	 * CONFLIT option, so in that case (except ON CONFLICT ABORT, which is
@@ -1511,10 +1511,21 @@ int tarantoolSqlite3MakeIdxOpts(SqliteIndex *index, const char *zSql, void *buf)
 	 * INSERT OR REPLACE/IGNORE uniqueness checks will be also done by
 	 * Tarantool.
 	 */
-	p = enc->encode_bool(p, IsUniqueIndex(index));
-	p = enc->encode_str(p, "sql", 3);
-	p = enc->encode_str(p, zSql, zSql ? strlen(zSql) : 0);
-	return (int)(p - base);
+	mpstream_encode_bool(&stream, IsUniqueIndex(index));
+	if (sql != NULL) {
+		mpstream_encode_str(&stream, "sql", strlen("sql"));
+		mpstream_encode_str(&stream, sql, strlen(sql));
+	}
+	mpstream_flush(&stream);
+	if (is_error)
+		return NULL;
+	uint32_t sz = region_used(region) - used;
+	char *raw = region_join(region, sz);
+	if (raw == NULL)
+		diag_set(OutOfMemory, sz, "region_join", "raw");
+	else
+		*size = sz;
+	return raw;
 }
 
 void

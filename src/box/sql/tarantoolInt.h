@@ -137,46 +137,74 @@ tarantoolSqlite3IdxKeyCompare(struct BtCursor *cursor,
 int
 tarantoolSqlite3IncrementMaxid(uint64_t *space_max_id);
 
-/*
- * Render "format" array for _space entry.
- * Returns result size.
- * If buf==NULL estimate result size.
+/**
+ * Encode Table AST to msgpack on @region.
+ *
+ * @param region to use.
+ * @param table AST to encode.
+ * @param[out] size of result allocation.
+ * @retval NULL on error.
+ * @retval not NULL msgpack pointer on success.
  */
-int tarantoolSqlite3MakeTableFormat(Table * pTable, void *buf);
-
-/*
- * Format "opts" dictionary for _space entry.
- * Returns result size.
- * If buf==NULL estimate result size.
- */
-int tarantoolSqlite3MakeTableOpts(Table * pTable, const char *zSql, char *buf);
+char *
+sql_encode_table(struct region *region, struct Table *table, uint32_t *size);
 
 /**
- * Encode links of given foreign key constraint into MsgPack.
+ * Encode "opts" dictionary for _space entry on @region.
  *
+ * @param region to use.
+ * @param table AST containing opts to encode.
+ * @param sql source request to encode.
+ * @param[out] size of result allocation.
+ * @retval NULL on error.
+ * @retval not NULL msgpack pointer on success.
+ */
+char *
+sql_encode_table_opts(struct region *region, struct Table *table,
+		      const char *sql, uint32_t *size);
+
+/**
+ * Encode links of given foreign key constraint into MsgPack on
+ * @region.
+ *
+ * @param region to use.
  * @param def FK def to encode links of.
  * @param type Links type to encode.
- * @param buf Buffer to hold encoded links. Can be NULL. In this
- *            case function would simply calculate memory required
- *            for such buffer.
- * @retval Length of encoded array.
+ * @param[out] size of result allocation.
+ * @retval NULL on error.
+ * @retval not NULL msgpack pointer on success.
  */
-int
-fkey_encode_links(const struct fkey_def *def, int type, char *buf);
+char *
+fkey_encode_links(struct region *region, const struct fkey_def *def, int type,
+		  uint32_t *size);
 
-/*
- * Format "parts" array for _index entry.
- * Returns result size.
- * If buf==NULL estimate result size.
+/**
+ * Encode links of given foreign key constraint into MsgPack on
+ * @region.
+ *
+ * @param region to use.
+ * @param index to encode.
+ * @param[out] size of result allocation.
+ * @retval NULL on error.
+ * @retval not NULL msgpack pointer on success.
  */
-int tarantoolSqlite3MakeIdxParts(Index * index, void *buf);
+char *
+sql_encode_index_parts(struct region *region, struct Index *index,
+		       uint32_t *size);
 
-/*
- * Format "opts" dictionary for _index entry.
- * Returns result size.
- * If buf==NULL estimate result size.
+/**
+ * Encode "opts" dictionary for _index entry on @region.
+ *
+ * @param region to use.
+ * @param index to encode.
+ * @param sql source request to encode.
+ * @param[out] size of result allocation.
+ * @retval NULL on error.
+ * @retval not NULL msgpack pointer on success.
  */
-int tarantoolSqlite3MakeIdxOpts(Index * index, const char *zSql, void *buf);
+char *
+sql_encode_index_opts(struct region *region, struct Index *index,
+		      const char *sql, uint32_t *size);
 
 /**
  * Extract next id from _sequence space.
