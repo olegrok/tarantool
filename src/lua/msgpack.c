@@ -50,46 +50,6 @@ luamp_error(void *error_ctx)
 	luaL_error(L, diag_last_error(diag_get())->errmsg);
 }
 
-void
-mpstream_init(struct mpstream *stream, void *ctx,
-	      luamp_reserve_f reserve, luamp_alloc_f alloc,
-	      luamp_error_f error, void *error_ctx)
-{
-	stream->ctx = ctx;
-	stream->reserve = reserve;
-	stream->alloc = alloc;
-	stream->error = error;
-	stream->error_ctx = error_ctx;
-	mpstream_reset(stream);
-}
-
-void
-mpstream_reserve_slow(struct mpstream *stream, size_t size)
-{
-	stream->alloc(stream->ctx, stream->pos - stream->buf);
-	stream->buf = (char *) stream->reserve(stream->ctx, &size);
-	if (stream->buf == NULL) {
-		diag_set(OutOfMemory, size, "mpstream", "reserve");
-		stream->error(stream->error_ctx);
-	}
-	stream->pos = stream->buf;
-	stream->end = stream->pos + size;
-}
-
-void
-mpstream_reset(struct mpstream *stream)
-{
-	size_t size = 0;
-	stream->buf = (char *) stream->reserve(stream->ctx, &size);
-	if (stream->buf == NULL) {
-		diag_set(OutOfMemory, size, "mpstream", "reset");
-		stream->error(stream->error_ctx);
-	}
-	stream->pos = stream->buf;
-	stream->end = stream->pos + size;
-}
-
-
 static uint32_t CTID_CHAR_PTR;
 static uint32_t CTID_STRUCT_IBUF;
 
@@ -112,10 +72,7 @@ luamp_encode_array(struct luaL_serializer *cfg, struct mpstream *stream,
 		   uint32_t size)
 {
 	(void) cfg;
-	assert(mp_sizeof_array(size) <= 5);
-	char *data = mpstream_reserve(stream, 5);
-	char *pos = mp_encode_array(data, size);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_array(stream, size);
 }
 
 void
@@ -123,10 +80,7 @@ luamp_encode_map(struct luaL_serializer *cfg, struct mpstream *stream,
 		 uint32_t size)
 {
 	(void) cfg;
-	assert(mp_sizeof_map(size) <= 5);
-	char *data = mpstream_reserve(stream, 5);
-	char *pos = mp_encode_map(data, size);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_map(stream, size);
 }
 
 void
@@ -134,10 +88,7 @@ luamp_encode_uint(struct luaL_serializer *cfg, struct mpstream *stream,
 		  uint64_t num)
 {
 	(void) cfg;
-	assert(mp_sizeof_uint(num) <= 9);
-	char *data = mpstream_reserve(stream, 9);
-	char *pos = mp_encode_uint(data, num);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_uint(stream, num);
 }
 
 void
@@ -145,10 +96,7 @@ luamp_encode_int(struct luaL_serializer *cfg, struct mpstream *stream,
 		 int64_t num)
 {
 	(void) cfg;
-	assert(mp_sizeof_int(num) <= 9);
-	char *data = mpstream_reserve(stream, 9);
-	char *pos = mp_encode_int(data, num);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_int(stream, num);
 }
 
 void
@@ -156,10 +104,7 @@ luamp_encode_float(struct luaL_serializer *cfg, struct mpstream *stream,
 		   float num)
 {
 	(void) cfg;
-	assert(mp_sizeof_float(num) <= 5);
-	char *data = mpstream_reserve(stream, 5);
-	char *pos = mp_encode_float(data, num);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_float(stream, num);
 }
 
 void
@@ -167,10 +112,7 @@ luamp_encode_double(struct luaL_serializer *cfg, struct mpstream *stream,
 		    double num)
 {
 	(void) cfg;
-	assert(mp_sizeof_double(num) <= 9);
-	char *data = mpstream_reserve(stream, 9);
-	char *pos = mp_encode_double(data, num);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_double(stream, num);
 }
 
 void
@@ -178,20 +120,14 @@ luamp_encode_str(struct luaL_serializer *cfg, struct mpstream *stream,
 		 const char *str, uint32_t len)
 {
 	(void) cfg;
-	assert(mp_sizeof_str(len) <= 5 + len);
-	char *data = mpstream_reserve(stream, 5 + len);
-	char *pos = mp_encode_str(data, str, len);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_str(stream, str, len);
 }
 
 void
 luamp_encode_nil(struct luaL_serializer *cfg, struct mpstream *stream)
 {
 	(void) cfg;
-	assert(mp_sizeof_nil() <= 1);
-	char *data = mpstream_reserve(stream, 1);
-	char *pos = mp_encode_nil(data);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_nil(stream);
 }
 
 void
@@ -199,10 +135,7 @@ luamp_encode_bool(struct luaL_serializer *cfg, struct mpstream *stream,
 		  bool val)
 {
 	(void) cfg;
-	assert(mp_sizeof_bool(val) <= 1);
-	char *data = mpstream_reserve(stream, 1);
-	char *pos = mp_encode_bool(data, val);
-	mpstream_advance(stream, pos - data);
+	mpstream_encode_bool(stream, val);
 }
 
 static enum mp_type

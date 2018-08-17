@@ -1,7 +1,7 @@
 #ifndef TARANTOOL_LUA_MSGPACK_H_INCLUDED
 #define TARANTOOL_LUA_MSGPACK_H_INCLUDED
 /*
- * Copyright 2010-2015, Tarantool AUTHORS, please see AUTHORS file.
+ * Copyright 2010-2018, Tarantool AUTHORS, please see AUTHORS file.
  *
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -34,6 +34,7 @@
 #include <stdbool.h>
 
 #include "utils.h"
+#include "mpstream.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -51,11 +52,6 @@ struct luaL_serializer;
 extern struct luaL_serializer *luaL_msgpack_default;
 
 /**
- * A streaming API so that it's possible to encode to any output
- * stream.
- */
-
-/**
  * Ask the allocator to reserve at least size bytes. It can reserve
  * more, and update *size with the new size.
  */
@@ -67,58 +63,11 @@ typedef	void *(*luamp_alloc_f)(void *ctx, size_t size);
 /** Actually use the bytes. */
 typedef	void (*luamp_error_f)(void *error_ctx);
 
-struct mpstream {
-	/**
-	 * When pos >= end, or required size doesn't fit in
-	 * pos..end range alloc() is called to advance the stream
-	 * and reserve() to get a new chunk.
-	 */
-	char *buf, *pos, *end;
-	void *ctx;
-	luamp_reserve_f reserve;
-	luamp_alloc_f alloc;
-	luamp_error_f error;
-	void *error_ctx;
-};
-
 /**
  * luaL_error()
  */
 void
 luamp_error(void *);
-
-void
-mpstream_init(struct mpstream *stream, void *ctx,
-	      luamp_reserve_f reserve, luamp_alloc_f alloc,
-	      luamp_error_f error, void *error_ctx);
-
-void
-mpstream_reset(struct mpstream *stream);
-
-void
-mpstream_reserve_slow(struct mpstream *stream, size_t size);
-
-static inline void
-mpstream_flush(struct mpstream *stream)
-{
-	stream->alloc(stream->ctx, stream->pos - stream->buf);
-	stream->buf = stream->pos;
-}
-
-static inline char *
-mpstream_reserve(struct mpstream *stream, size_t size)
-{
-	if (stream->pos + size > stream->end)
-		mpstream_reserve_slow(stream, size);
-	return stream->pos;
-}
-
-static inline void
-mpstream_advance(struct mpstream *stream, size_t size)
-{
-	assert(stream->pos + size <= stream->end);
-	stream->pos += size;
-}
 
 enum { LUAMP_ALLOC_FACTOR = 256 };
 
