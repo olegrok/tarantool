@@ -600,12 +600,12 @@ sql_field_retrieve(Parse *parser, Table *table, uint32_t id)
  * column.
  */
 void
-sqlite3AddColumn(Parse * pParse, Token * pName, Token * pType)
+sqlite3AddColumn(Parse * pParse, Token * pName, TypeDef * pType)
 {
+	assert(pType != NULL);
 	Table *p;
 	int i;
 	char *z;
-	char *zType;
 	sqlite3 *db = pParse->db;
 	if ((p = pParse->pNewTable) == 0)
 		return;
@@ -653,35 +653,22 @@ sqlite3AddColumn(Parse * pParse, Token * pName, Token * pType)
 	 */
 	column_def->nullable_action = ON_CONFLICT_ACTION_DEFAULT;
 	column_def->is_nullable = true;
-
-	if (pType->n == 0) {
-		/* If there is no type specified, columns have the default affinity
-		 * 'BLOB' and type SCALAR.
-		 * TODO: since SQL standard prohibits column creation without
-		 * specified type, the code below should emit an error.
-		 */
-		column_def->affinity = AFFINITY_BLOB;
-		column_def->type = FIELD_TYPE_SCALAR;
-	} else {
-		/* TODO: convert string of type into runtime
-		 * FIELD_TYPE value for other types.
-		 */
-		if ((sqlite3StrNICmp(pType->z, "INTEGER", 7) == 0 &&
-		     pType->n == 7) ||
-		    (sqlite3StrNICmp(pType->z, "INT", 3) == 0 &&
-		     pType->n == 3)) {
+	column_def->affinity = pType->type;
+	switch (column_def->affinity) {
+		case AFFINITY_INTEGER:
 			column_def->type = FIELD_TYPE_INTEGER;
-			column_def->affinity = AFFINITY_INTEGER;
-		} else {
-			zType = sqlite3_malloc(pType->n + 1);
-			memcpy(zType, pType->z, pType->n);
-			zType[pType->n] = 0;
-			sqlite3Dequote(zType);
-			column_def->affinity = sqlite3AffinityType(zType, 0);
+			break;
+		case AFFINITY_REAL:
+		case AFFINITY_NUMERIC:
+			column_def->type = FIELD_TYPE_NUMBER;
+			break;
+		case AFFINITY_TEXT:
+			column_def->type = FIELD_TYPE_STRING;
+			break;
+		default:
 			column_def->type = FIELD_TYPE_SCALAR;
-			sqlite3_free(zType);
-		}
 	}
+
 	p->def->field_count++;
 	pParse->constraintName.n = 0;
 }
@@ -942,7 +929,7 @@ sqlite3AddPrimaryKey(Parse * pParse,	/* Parsing context */
 		sqlite3TokenInit(&token, pTab->def->fields[iCol].name);
 		list = sql_expr_list_append(db, NULL,
 					    sqlite3ExprAlloc(db, TK_ID,
-							     &token, 0));
+							     0, &token, 0));
 		if (list == NULL)
 			goto primary_key_exit;
 		sql_create_index(pParse, 0, 0, list, onError, 0, 0,
@@ -2933,7 +2920,7 @@ sql_create_index(struct Parse *parse, struct Token *token,
 				 table->def->fields[last_field].name);
 		col_list = sql_expr_list_append(parse->db, NULL,
 						sqlite3ExprAlloc(db, TK_ID,
-								 &prev_col, 0));
+								 0, &prev_col, 0));
 		if (col_list == NULL)
 			goto exit_create_index;
 		assert(col_list->nExpr == 1);

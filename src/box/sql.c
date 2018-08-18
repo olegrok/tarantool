@@ -1256,26 +1256,19 @@ static const struct Enc *get_enc(void *buf)
  */
 static const char *convertSqliteAffinity(int affinity, bool allow_nulls)
 {
-	if (allow_nulls || 1) {
-		return "scalar";
-	}
+	(void) allow_nulls;
 	switch (affinity) {
-	default:
-		assert(false);
 	case AFFINITY_BLOB:
 		return "scalar";
 	case AFFINITY_TEXT:
 		return "string";
 	case AFFINITY_NUMERIC:
 	case AFFINITY_REAL:
-	  /* Tarantool workaround: to make comparators able to compare, e.g.
-	     double and int use generic type. This might be a performance issue.  */
-	  /* return "number"; */
-		return "scalar";
+		return "number";
 	case AFFINITY_INTEGER:
-	  /* See comment above.  */
-	  /* return "integer"; */
-		return "scalar";
+		return "integer";
+	default:
+		assert(false);
 	}
 }
 

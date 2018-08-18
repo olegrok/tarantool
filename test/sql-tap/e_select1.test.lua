@@ -24,21 +24,21 @@ test:plan(541)
 test:do_execsql_test(
     "e_select-1.0",
     [[
-        CREATE TABLE t1(a PRIMARY KEY, b);
+        CREATE TABLE t1(a TEXT PRIMARY KEY, b TEXT);
         INSERT INTO t1 VALUES('a', 'one');
         INSERT INTO t1 VALUES('b', 'two');
         INSERT INTO t1 VALUES('c', 'three');
 
-        CREATE TABLE t2(a PRIMARY KEY, b);
+        CREATE TABLE t2(a TEXT PRIMARY KEY, b TEXT);
         INSERT INTO t2 VALUES('a', 'I');
         INSERT INTO t2 VALUES('b', 'II');
         INSERT INTO t2 VALUES('c', 'III');
 
-        CREATE TABLE t3(a PRIMARY KEY, c);
+        CREATE TABLE t3(a TEXT PRIMARY KEY, c INT);
         INSERT INTO t3 VALUES('a', 1);
         INSERT INTO t3 VALUES('b', 2);
 
-        CREATE TABLE t4(a PRIMARY KEY, c);
+        CREATE TABLE t4(a TEXT PRIMARY KEY, c INT);
         INSERT INTO t4 VALUES('a', NULL);
         INSERT INTO t4 VALUES('b', 2);
     ]], {
@@ -298,57 +298,6 @@ test:do_select_tests(
         {"6", "SELECT count(*) WHERE 1", {1}},
     })
 
--- EVIDENCE-OF: R-45424-07352 If there is only a single table or subquery
--- in the FROM clause, then the input data used by the SELECT statement
--- is the contents of the named table.
---
---   The results of the SELECT queries suggest that they are operating on the
---   contents of the table 'xx'.
---
-test:do_execsql_test(
-    "e_select-1.2.0",
-    [[
-        CREATE TABLE xx(id primary key, x, y);
-        INSERT INTO xx VALUES(1, 'IiJlsIPepMuAhU', X'10B00B897A15BAA02E3F98DCE8F2');
-        INSERT INTO xx VALUES(2, NULL, -16.87);
-        INSERT INTO xx VALUES(3, -17.89, 'linguistically');
-    ]], {
-        -- <e_select-1.2.0>
-
-        -- </e_select-1.2.0>
-    })
-
-test:do_select_tests(
-    "e_select-1.2",
-    {
-        {"1", "SELECT quote(x), quote(y) FROM xx", {"'IiJlsIPepMuAhU'", "X'10B00B897A15BAA02E3F98DCE8F2'", "NULL", "-16.87", "-17.89", "'linguistically'" }},
-        {"2", "SELECT count(*), count(x), count(y) FROM xx", {3, 2, 3}},
-        {"3", "SELECT sum(x), sum(y) FROM xx", {-17.89, -16.87}},
-    })
-
--- EVIDENCE-OF: R-28355-09804 If there is more than one table or subquery
--- in FROM clause then the contents of all tables and/or subqueries are
--- joined into a single dataset for the simple SELECT statement to
--- operate on.
---
---   There are more detailed tests for subsequent requirements that add
---   more detail to this idea. We just add a single test that shows that
---   data is coming from each of the three tables following the FROM clause
---   here to show that the statement, vague as it is, is not incorrect.
---
-test:do_select_tests(
-    "e_select-1.3",
-    {
-        {"1", "SELECT * FROM t1, t2, t3", {
-            "a" ,"one" ,"a" ,"I" ,"a" ,1 ,"a" ,"one" ,"a" ,"I" ,"b" ,2 ,"a" ,"one" ,"b" ,"II" ,"a" ,1 ,
-            "a" ,"one" ,"b" ,"II" ,"b" ,2 ,"a" ,"one" ,"c" ,"III" ,"a" ,1 ,"a" ,"one" ,"c" ,"III" ,"b" ,2 ,
-            "b" ,"two" ,"a" ,"I" ,"a" ,1 ,"b" ,"two" ,"a" ,"I" ,"b" ,2 ,"b" ,"two" ,"b" ,"II" ,"a" ,1 ,
-            "b" ,"two" ,"b" ,"II" ,"b" ,2 ,"b" ,"two" ,"c" ,"III" ,"a" ,1 ,"b" ,"two" ,"c" ,"III" ,"b" ,2 ,
-            "c" ,"three" ,"a" ,"I" ,"a" ,1 ,"c" ,"three" ,"a" ,"I" ,"b" ,2 ,"c" ,"three" ,"b" ,"II" ,"a" ,1 ,
-            "c" ,"three" ,"b" ,"II" ,"b" ,2 ,"c" ,"three" ,"c", "III", "a", 1, "c", "three", "c", "III", "b", 2
-        }},
-    })
-
 --
 -- The following block of tests - e_select-1.4.* - test that the description
 -- of cartesian joins in the SELECT documentation is consistent with SQLite.
@@ -377,13 +326,13 @@ test:do_select_tests(
 test:do_execsql_test(
     "e_select-1.4.0",
     [[
-        CREATE TABLE x1(id primary key, a, b);
-        CREATE TABLE x2(id primary key, c, d, e);
-        CREATE TABLE x3(id primary key, f, g, h, i);
+        CREATE TABLE x1(id  INT primary key, a TEXT , b TEXT );
+        CREATE TABLE x2(id  INT primary key, c FLOAT , d FLOAT , e FLOAT );
+        CREATE TABLE x3(id  INT primary key, f TEXT , g TEXT , h TEXT , i TEXT );
 
         -- x1: 3 rows, 2 columns
-        INSERT INTO x1 VALUES(1,24, 'converging');
-        INSERT INTO x1 VALUES(2,NULL, X'CB71');
+        INSERT INTO x1 VALUES(1,'24', 'converging');
+        INSERT INTO x1 VALUES(2, NULL, CAST(X'CB71' as TEXT));
         INSERT INTO x1 VALUES(3,'blonds', 'proprietary');
 
         -- x2: 2 rows, 3 columns
@@ -391,11 +340,11 @@ test:do_execsql_test(
         INSERT INTO x2 VALUES(2,-58, NULL, 1.21);
 
         -- x3: 5 rows, 4 columns
-        INSERT INTO x3 VALUES(1,-39.24, NULL, 'encompass', -1);
-        INSERT INTO x3 VALUES(2,'presenting', 51, 'reformation', 'dignified');
-        INSERT INTO x3 VALUES(3,'conducting', -87.24, 37.56, NULL);
-        INSERT INTO x3 VALUES(4,'coldest', -96, 'dramatists', 82.3);
-        INSERT INTO x3 VALUES(5,'alerting', NULL, -93.79, NULL);
+        INSERT INTO x3 VALUES(1,'-39.24', NULL, 'encompass', '-1');
+        INSERT INTO x3 VALUES(2,'presenting', '51', 'reformation', 'dignified');
+        INSERT INTO x3 VALUES(3,'conducting', '-87.24', '37.56', NULL);
+        INSERT INTO x3 VALUES(4,'coldest', '-96', 'dramatists', '82.3');
+        INSERT INTO x3 VALUES(5,'alerting', NULL, '-93.79', NULL);
     ]], {
         -- <e_select-1.4.0>
 
@@ -408,23 +357,23 @@ test:do_execsql_test(
 --
 do_join_test("e_select-1.4.1.1", [[
   SELECT a,b,c,d,e FROM x1 JOIN_PATTERN x2 LIMIT 1
-]], {24, "converging", -60.06, "", ""})
+]], {"24", "converging", -60.06, "", ""})
 do_join_test("e_select-1.4.1.2", [[
   SELECT c,d,e,a,b FROM x2 JOIN_PATTERN x1 LIMIT 1
-]], {-60.06, "", "", 24, "converging"})
+]], {-60.06, "", "", "24", "converging"})
 do_join_test("e_select-1.4.1.3", [[
   SELECT f,g,h,i,c,d,e FROM x3 JOIN_PATTERN x2 LIMIT 1
-]], {-39.24, "", "encompass", -1, -60.06, "", ""})
+]], {'-39.24', "", "encompass", '-1', -60.06, "", ""})
 do_join_test("e_select-1.4.1.4", [[
   SELECT c,d,e,f,g,h,i FROM x2 JOIN_PATTERN x3 LIMIT 1
-]], {-60.06, "", "", -39.24, "", "encompass", -1})
+]], {-60.06, "", "", '-39.24', "", "encompass", '-1'})
 -- EVIDENCE-OF: R-44414-54710 There is a row in the cartesian product
 -- dataset formed by combining each unique combination of a row from the
 -- left-hand and right-hand datasets.
 --
 do_join_test("e_select-1.4.2.1", [[
   SELECT c,d,e,f,g,h,i FROM x2 JOIN_PATTERN x3 ORDER BY +c, +f
-]], { -60.06, "", "", -39.24, "", "encompass", -1, -60.06, "", "", "alerting", "", -93.79, "", -60.06, "", "", "coldest", -96, "dramatists", 82.3, -60.06, "", "", "conducting", -87.24, 37.56, "", -60.06, "", "", "presenting", 51, "reformation", "dignified", -58, "", 1.21, -39.24, "", "encompass", -1, -58, "", 1.21, "alerting", "", -93.79, "", -58, "", 1.21, "coldest", -96, "dramatists", 82.3, -58, "", 1.21, "conducting", -87.24, 37.56, "", -58, "", 1.21, "presenting", 51, "reformation", "dignified" })
+]], { -60.06,"","","-39.24","","encompass","-1",-60.06,"","","alerting","","-93.79","",-60.06,"","","coldest","-96","dramatists","82.3",-60.06,"","","conducting","-87.24","37.56","",-60.06,"","","presenting","51","reformation","dignified",-58,"",1.21,"-39.24","","encompass","-1",-58,"",1.21,"alerting","","-93.79","",-58,"",1.21,"coldest","-96","dramatists","82.3",-58,"",1.21,"conducting","-87.24","37.56","",-58,"",1.21,"presenting","51","reformation","dignified" })
 -- TODO: Come back and add a few more like the above.
 -- EVIDENCE-OF: R-18439-38548 In other words, if the left-hand dataset
 -- consists of Nleft rows of Mleft columns, and the right-hand dataset of
@@ -561,11 +510,11 @@ if (0 > 0)
     test:do_execsql_test(
         "e_select-1.6.0",
         [[
-            CREATE TABLE t5(a COLLATE "unicode_ci", b COLLATE binary);
+            CREATE TABLE t5(a  TEXT COLLATE "unicode_ci", b  TEXT COLLATE binary);
             INSERT INTO t5 VALUES('AA', 'cc');
             INSERT INTO t5 VALUES('BB', 'dd');
             INSERT INTO t5 VALUES(NULL, NULL);
-            CREATE TABLE t6(a COLLATE binary, b COLLATE "unicode_ci");
+            CREATE TABLE t6(a  TEXT COLLATE binary, b  TEXT COLLATE "unicode_ci");
             INSERT INTO t6 VALUES('aa', 'cc');
             INSERT INTO t6 VALUES('bb', 'DD');
             INSERT INTO t6 VALUES(NULL, NULL);
@@ -597,8 +546,8 @@ end
 test:do_execsql_test(
     "e_select-1.8.0",
     [[
-        CREATE TABLE t7(a PRIMARY KEY, b, c);
-        CREATE TABLE t8(a PRIMARY KEY, d, e);
+        CREATE TABLE t7(a TEXT PRIMARY KEY, b TEXT, c INT );
+        CREATE TABLE t8(a TEXT PRIMARY KEY, d TEXT, e INT );
 
         INSERT INTO t7 VALUES('x', 'ex',  24);
         INSERT INTO t7 VALUES('y', 'why', 25);
@@ -668,7 +617,7 @@ test:do_select_tests(
 test:do_execsql_test(
     "e_select-1.11.0",
     [[
-        CREATE TABLE t10(id primary key, x, y);
+        CREATE TABLE t10(id  INT primary key, x INT , y TEXT);
         INSERT INTO t10 VALUES(1, 1, 'true');
         INSERT INTO t10 VALUES(2, 0, 'false');
     ]], {
@@ -710,18 +659,18 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-3.0",
     [[
-        CREATE TABLE x1(id PRIMARY KEY, k, x, y, z);
-        INSERT INTO x1 VALUES(1, 1, 'relinquished', 'aphasia', 78.43);
-        INSERT INTO x1 VALUES(2, 2, X'A8E8D66F',    X'07CF',   -81);
-        INSERT INTO x1 VALUES(3, 3, -22,            -27.57,    NULL);
+        CREATE TABLE x1(id  INT PRIMARY KEY, k INT , x TEXT , y TEXT , z TEXT );
+        INSERT INTO x1 VALUES(1, 1, 'relinquished', 'aphasia', '78.43');
+        INSERT INTO x1 VALUES(2, 2, 'A8E8D66F',    '07CF',   '-81');
+        INSERT INTO x1 VALUES(3, 3, '-22',            '-27.57',    NULL);
         INSERT INTO x1 VALUES(4, 4, NULL,           'bygone',  'picky');
-        INSERT INTO x1 VALUES(5, 5, NULL,           96.28,     NULL);
-        INSERT INTO x1 VALUES(6, 6, 0,              1,         2);
+        INSERT INTO x1 VALUES(5, 5, NULL,           '96.28',     NULL);
+        INSERT INTO x1 VALUES(6, 6, '0',              '1',         '2');
 
-        CREATE TABLE x2(id primary key, k, x, y2);
-        INSERT INTO x2 VALUES(1, 1, 50, X'B82838');
-        INSERT INTO x2 VALUES(2, 5, 84.79, 65.88);
-        INSERT INTO x2 VALUES(3, 3, -22, X'0E1BE452A393');
+        CREATE TABLE x2(id  INT primary key, k INT , x TEXT , y2 TEXT );
+        INSERT INTO x2 VALUES(1, 1, '50', 'B82838');
+        INSERT INTO x2 VALUES(2, 5, '84.79', '65.88');
+        INSERT INTO x2 VALUES(3, 3, '-22', '0E1BE452A393');
         INSERT INTO x2 VALUES(4, 7, 'mistrusted', 'standardized');
     ]], {
         -- <e_select-3.0>
@@ -750,7 +699,7 @@ test:do_execsql_test(
         SELECT k FROM x1 WHERE y
     ]], {
         -- <e_select-3.1.2>
-        3, 5, 6
+        2, 3, 5, 6
         -- </e_select-3.1.2>
     })
 
@@ -852,9 +801,9 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-4.0",
     [[
-        CREATE TABLE z1(id primary key, a, b, c);
-        CREATE TABLE z2(id primary key, d, e);
-        CREATE TABLE z3(id primary key, a, b);
+        CREATE TABLE z1(id  INT primary key, a INT , b INT , c INT );
+        CREATE TABLE z2(id  INT primary key, d INT , e INT );
+        CREATE TABLE z3(id  INT primary key, a INT , b INT );
 
         INSERT INTO z1 VALUES(1, 51.65, -59.58, 'belfries');
         INSERT INTO z1 VALUES(2, -5, NULL, 75);
@@ -1018,13 +967,13 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-4.6.0",
     [[
-        CREATE TABLE a1(one PRIMARY KEY, two);
+        CREATE TABLE a1(one  INT PRIMARY KEY, two INT );
         INSERT INTO a1 VALUES(1, 1);
         INSERT INTO a1 VALUES(2, 3);
         INSERT INTO a1 VALUES(3, 6);
         INSERT INTO a1 VALUES(4, 10);
 
-        CREATE TABLE a2(one PRIMARY KEY, three);
+        CREATE TABLE a2(one  INT PRIMARY KEY, three INT );
         INSERT INTO a2 VALUES(1, 1);
         INSERT INTO a2 VALUES(3, 2);
         INSERT INTO a2 VALUES(6, 3);
@@ -1083,7 +1032,7 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-4.9.0",
     [[
-        CREATE TABLE b1(one PRIMARY KEY, two);
+        CREATE TABLE b1(one  INT PRIMARY KEY, two INT );
         INSERT INTO b1 VALUES(1, 'o');
         INSERT INTO b1 VALUES(4, 'f');
         INSERT INTO b1 VALUES(3, 't');
@@ -1092,14 +1041,14 @@ test:do_execsql_test(
         INSERT INTO b1 VALUES(7, 's');
         INSERT INTO b1 VALUES(6, 's');
 
-        CREATE TABLE b2(x, y PRIMARY KEY);
+        CREATE TABLE b2(x INT , y  INT PRIMARY KEY);
         INSERT INTO b2 VALUES(NULL, 0);
         INSERT INTO b2 VALUES(NULL, 1);
         INSERT INTO b2 VALUES('xyz', 2);
         INSERT INTO b2 VALUES('abc', 3);
         INSERT INTO b2 VALUES('xyz', 4);
 
-        CREATE TABLE b3(id PRIMARY KEY, a COLLATE "unicode_ci", b COLLATE binary);
+        CREATE TABLE b3(id  INT PRIMARY KEY, a  TEXT COLLATE "unicode_ci", b  TEXT COLLATE binary);
         INSERT INTO b3 VALUES(1, 'abc', 'abc');
         INSERT INTO b3 VALUES(2, 'aBC', 'aBC');
         INSERT INTO b3 VALUES(3, 'Def', 'Def');
@@ -1200,7 +1149,7 @@ end
 test:do_execsql_test(
     "e_select-4.13.0",
     [[
-        CREATE TABLE c1(up, down PRIMARY KEY);
+        CREATE TABLE c1(up INT , down  INT PRIMARY KEY);
         INSERT INTO c1 VALUES('x', 1);
         INSERT INTO c1 VALUES('x', 2);
         INSERT INTO c1 VALUES('x', 4);
@@ -1208,7 +1157,7 @@ test:do_execsql_test(
         INSERT INTO c1 VALUES('y', 16);
         INSERT INTO c1 VALUES('y', 32);
 
-        CREATE TABLE c2(i PRIMARY KEY, j);
+        CREATE TABLE c2(i  INT PRIMARY KEY, j INT );
         INSERT INTO c2 VALUES(1, 0);
         INSERT INTO c2 VALUES(2, 1);
         INSERT INTO c2 VALUES(3, 3);
@@ -1219,7 +1168,7 @@ test:do_execsql_test(
         INSERT INTO c2 VALUES(8, 28);
         INSERT INTO c2 VALUES(9, 36);
 
-        CREATE TABLE c3(i PRIMARY KEY, k TEXT);
+        CREATE TABLE c3(i  INT PRIMARY KEY, k TEXT);
         INSERT INTO c3 VALUES(1,  'hydrogen');
         INSERT INTO c3 VALUES(2,  'helium');
         INSERT INTO c3 VALUES(3,  'lithium');
@@ -1303,7 +1252,7 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-5.1.0",
     [[
-        CREATE TABLE h1(id primary key, a, b);
+        CREATE TABLE h1(id  INT primary key, a INT , b INT );
         INSERT INTO h1 VALUES(1, 1, 'one');
         INSERT INTO h1 VALUES(2, 1, 'I');
         INSERT INTO h1 VALUES(3, 1, 'i');
@@ -1311,7 +1260,7 @@ test:do_execsql_test(
         INSERT INTO h1 VALUES(5, 4, 'IV');
         INSERT INTO h1 VALUES(6, 4, 'iv');
 
-        CREATE TABLE h2(id primary key, x COLLATE "unicode_ci");
+        CREATE TABLE h2(id  INT primary key, x  TEXT COLLATE "unicode_ci");
         INSERT INTO h2 VALUES(1, 'One');
         INSERT INTO h2 VALUES(2, 'Two');
         INSERT INTO h2 VALUES(3, 'Three');
@@ -1321,7 +1270,7 @@ test:do_execsql_test(
         INSERT INTO h2 VALUES(7, 'three');
         INSERT INTO h2 VALUES(8, 'four');
 
-        CREATE TABLE h3(c PRIMARY KEY, d);
+        CREATE TABLE h3(c  INT PRIMARY KEY, d INT );
         INSERT INTO h3 VALUES(1, NULL);
         INSERT INTO h3 VALUES(2, NULL);
         INSERT INTO h3 VALUES(3, NULL);
@@ -1411,9 +1360,9 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-7.1.0",
     [[
-        CREATE TABLE j1(a PRIMARY KEY, b, c);
-        CREATE TABLE j2(e PRIMARY KEY, f);
-        CREATE TABLE j3(g PRIMARY KEY);
+        CREATE TABLE j1(a  INT PRIMARY KEY, b INT , c INT );
+        CREATE TABLE j2(e  INT PRIMARY KEY, f INT );
+        CREATE TABLE j3(g  INT PRIMARY KEY);
     ]], {
         -- <e_select-7.1.0>
 
@@ -1557,9 +1506,9 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-7.4.0",
     [[
-        CREATE TABLE q1(id primary key, a TEXT, b INTEGER, c);
-        CREATE TABLE q2(id primary key, d NUMBER, e BLOB);
-        CREATE TABLE q3(id primary key, f REAL, g);
+        CREATE TABLE q1(id  INT primary key, a TEXT, b INTEGER, c INT );
+        CREATE TABLE q2(id  INT primary key, d NUMBER, e BLOB);
+        CREATE TABLE q3(id  INT primary key, f REAL, g INT );
 
         INSERT INTO q1 VALUES(1, 16, -87.66, NULL);
         INSERT INTO q1 VALUES(2, 'legible', 94, -42.47);
@@ -1676,7 +1625,7 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-7.10.0",
     [[
-        CREATE TABLE y1(a COLLATE "unicode_ci" PRIMARY KEY, b COLLATE binary, c);
+        CREATE TABLE y1(a  TEXT COLLATE "unicode_ci" PRIMARY KEY, b  TEXT COLLATE binary, c INT );
         INSERT INTO y1 VALUES('Abc', 'abc', 'aBC');
     ]], {
         -- <e_select-7.10.0>
@@ -1706,7 +1655,7 @@ test:do_execsql_test(
     "e_select-7.10.0",
     [[
         CREATE TABLE w1(a TEXT PRIMARY KEY, b NUMBER);
-        CREATE TABLE w2(a PRIMARY KEY, b TEXT);
+        CREATE TABLE w2(a  INT PRIMARY KEY, b TEXT);
 
         INSERT INTO w1 VALUES('1', 4.1);
         INSERT INTO w2 VALUES(1, 4.1);
@@ -1754,7 +1703,7 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-7.12.0",
     [[
-        CREATE TABLE t1(x PRIMARY KEY);
+        CREATE TABLE t1(x  INT PRIMARY KEY);
         INSERT INTO t1 VALUES(1);
         INSERT INTO t1 VALUES(2);
         INSERT INTO t1 VALUES(3);
@@ -1793,7 +1742,7 @@ test:drop_all_tables()
 test:do_execsql_test(
     "e_select-8.1.0",
     [[
-        CREATE TABLE d1(id primary key, x, y, z);
+        CREATE TABLE d1(id  INT primary key, x INT , y INT , z INT );
 
         INSERT INTO d1 VALUES(1, 1, 2, 3);
         INSERT INTO d1 VALUES(2, 2, 5, -1);
@@ -1804,7 +1753,7 @@ test:do_execsql_test(
         INSERT INTO d1 VALUES(7, 1, 4, 93);
         INSERT INTO d1 VALUES(8, 1, 5, -1);
 
-        CREATE TABLE d2(id primary key, a, b);
+        CREATE TABLE d2(id  INT primary key, a INT , b INT );
         INSERT INTO d2 VALUES(1, 'gently', 'failings');
         INSERT INTO d2 VALUES(2, 'commercials', 'bathrobe');
         INSERT INTO d2 VALUES(3, 'iterate', 'sexton');
@@ -1981,7 +1930,7 @@ test:do_select_tests(
 test:do_execsql_test(
     "e_select-8.8.0",
     [[
-        CREATE TABLE d3(id primary key, a);
+        CREATE TABLE d3(id  INT primary key, a INT );
         INSERT INTO d3 VALUES(1, 'text');
         INSERT INTO d3 VALUES(2, 14.1);
         INSERT INTO d3 VALUES(3, 13);
@@ -1990,7 +1939,7 @@ test:do_execsql_test(
         INSERT INTO d3 VALUES(6, 12.9);
         INSERT INTO d3 VALUES(7, null);
 
-        CREATE TABLE d4(id primary key, x COLLATE "unicode_ci");
+        CREATE TABLE d4(id  INT primary key, x  TEXT COLLATE "unicode_ci");
         INSERT INTO d4 VALUES(1, 'abc');
         INSERT INTO d4 VALUES(2, 'ghi');
         INSERT INTO d4 VALUES(3, 'DEF');
@@ -2139,9 +2088,9 @@ test:do_execsql_test(
 test:do_execsql_test(
     "e_select-8.13.0",
     [[
-        CREATE TABLE d5(a PRIMARY KEY, b);
-        CREATE TABLE d6(c PRIMARY KEY, d);
-        CREATE TABLE d7(e PRIMARY KEY, f);
+        CREATE TABLE d5(a  INT PRIMARY KEY, b INT );
+        CREATE TABLE d6(c  INT PRIMARY KEY, d INT );
+        CREATE TABLE d7(e  INT PRIMARY KEY, f INT );
 
         INSERT INTO d5 VALUES(1, 'f');
         INSERT INTO d6 VALUES(2, 'e');
@@ -2150,8 +2099,8 @@ test:do_execsql_test(
         INSERT INTO d6 VALUES(5, 'b');
         INSERT INTO d7 VALUES(6, 'a');
 
-        CREATE TABLE d8(x COLLATE "unicode_ci" PRIMARY KEY);
-        CREATE TABLE d9(y COLLATE "unicode_ci" PRIMARY KEY);
+        CREATE TABLE d8(x  TEXT COLLATE "unicode_ci" PRIMARY KEY);
+        CREATE TABLE d9(y  TEXT COLLATE "unicode_ci" PRIMARY KEY);
 
         INSERT INTO d8 VALUES('a');
         INSERT INTO d9 VALUES('B');
@@ -2216,7 +2165,7 @@ test:do_select_tests(
 test:do_execsql_test(
     "e_select-9.0",
     [[
-        CREATE TABLE f1(id primary key, a, b);
+        CREATE TABLE f1(id  INT primary key, a INT , b INT );
         INSERT INTO f1 VALUES(1, 26, 'z');
         INSERT INTO f1 VALUES(2, 25, 'y');
         INSERT INTO f1 VALUES(3, 24, 'x');

@@ -512,7 +512,7 @@ codeEqualityTerm(Parse * pParse,	/* The parsing context */
 		    || pX->x.pSelect->pEList->nExpr == 1) {
 			eType =
 			    sqlite3FindInIndex(pParse, pX, IN_INDEX_LOOP, 0, 0,
-					       &iSingleIdxCol);
+					       &iSingleIdxCol, NULL);
 		} else {
 			Select *pSelect = pX->x.pSelect;
 			sqlite3 *db = pParse->db;
@@ -580,7 +580,7 @@ codeEqualityTerm(Parse * pParse,	/* The parsing context */
 				eType =
 				    sqlite3FindInIndex(pParse, pX,
 						       IN_INDEX_LOOP, 0, aiMap,
-						       0);
+						       0, NULL);
 				db->dbOptFlags = savedDbOptFlags;
 				testcase(aiMap != 0 && aiMap[0] != 0);
 				pSelect->pEList = pOrigRhs;

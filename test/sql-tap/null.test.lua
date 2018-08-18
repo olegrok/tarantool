@@ -25,7 +25,7 @@ test:plan(45)
 test:do_execsql_test(
     "null-1.0",
     [[
-        create table t1(a primary key,b,c);
+        create table t1(a  INT primary key,b INT ,c INT );
         START TRANSACTION;
         insert into t1 values(1,0,0);
         insert into t1 values(2,0,1);
@@ -316,7 +316,7 @@ test:do_catchsql_test(
 test:do_execsql_test(
     "null-7.1",
     [[
-        create table t2(a primary key, b unique on conflict ignore);
+        create table t2(a  INT primary key, b  INT unique on conflict ignore);
         insert into t2 values(1,1);
         insert into t2 values(2,null);
         insert into t2 values(3,null);
@@ -331,7 +331,7 @@ test:do_execsql_test(
 test:do_execsql_test(
     "null-7.2",
     [[
-        create table t3(a primary key, b, c, unique(b,c) on conflict ignore);
+        create table t3(a  INT primary key, b INT , c INT , unique(b,c) on conflict ignore);
         insert into t3 values(1,1,1);
         insert into t3 values(2,null,1);
         insert into t3 values(3,null,1);
@@ -349,7 +349,7 @@ test:do_execsql_test(
 test:do_execsql_test(
     "null-8.1",
     [[
-        CREATE TABLE t4(x primary key,y);
+        CREATE TABLE t4(x  INT primary key,y INT );
         INSERT INTO t4 VALUES(1,11);
         INSERT INTO t4 VALUES(2,NULL);
         SELECT x FROM t4 WHERE y=NULL;
@@ -455,7 +455,7 @@ test:do_execsql_test(
     })
 
 -- do_execsql_test null-9.1 {
---   CREATE TABLE t5(a, b, c);
+--   CREATE TABLE t5(a INT , b INT , c INT );
 --   CREATE UNIQUE INDEX t5ab ON t5(a, b);
 --   INSERT INTO t5 VALUES(1, NULL, 'one');
 --   INSERT INTO t5 VALUES(1, NULL, 'i');

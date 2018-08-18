@@ -31,8 +31,8 @@ test:do_execsql_test(
     [[
         CREATE TABLE t1(
           a INTEGER PRIMARY KEY ON CONFLICT REPLACE, 
-          b UNIQUE ON CONFLICT IGNORE,
-          c UNIQUE ON CONFLICT FAIL
+          b INT UNIQUE ON CONFLICT IGNORE,
+          c INT UNIQUE ON CONFLICT FAIL
         );
         INSERT INTO t1(a,b,c) VALUES(1,2,3), (2,3,4);
         SELECT a,b,c FROM t1 ORDER BY a;
@@ -86,8 +86,8 @@ test:do_execsql_test(
         DROP TABLE t1;
         CREATE TABLE t1(
           a INT PRIMARY KEY ON CONFLICT REPLACE, 
-          b UNIQUE ON CONFLICT IGNORE,
-          c UNIQUE ON CONFLICT FAIL
+          b INT UNIQUE ON CONFLICT IGNORE,
+          c INT UNIQUE ON CONFLICT FAIL
         );
         INSERT INTO t1(a,b,c) VALUES(1,2,3), (2,3,4);
         SELECT a,b,c FROM t1 ORDER BY a;
@@ -141,8 +141,8 @@ test:do_execsql_test(
         DROP TABLE t1;
         CREATE TABLE t1(
           a INT PRIMARY KEY ON CONFLICT REPLACE, 
-          b UNIQUE ON CONFLICT IGNORE,
-          c UNIQUE ON CONFLICT FAIL
+          b INT UNIQUE ON CONFLICT IGNORE,
+          c INT UNIQUE ON CONFLICT FAIL
         );
         INSERT INTO t1(a,b,c) VALUES(1,2,3), (2,3,4);
         SELECT a,b,c FROM t1 ORDER BY a;
@@ -195,8 +195,8 @@ test:do_execsql_test(
     [[
         DROP TABLE t1;
         CREATE TABLE t1(
-          b UNIQUE ON CONFLICT IGNORE,
-          c UNIQUE ON CONFLICT FAIL,
+          b INT UNIQUE ON CONFLICT IGNORE,
+          c INT UNIQUE ON CONFLICT FAIL,
           a INT PRIMARY KEY ON CONFLICT REPLACE
         );
         INSERT INTO t1(a,b,c) VALUES(1,2,3), (2,3,4);
@@ -250,9 +250,9 @@ test:do_execsql_test(
     [[
         DROP TABLE t1;
         CREATE TABLE t1(
-          b UNIQUE ON CONFLICT IGNORE,
+          b INT UNIQUE ON CONFLICT IGNORE,
           a INT PRIMARY KEY ON CONFLICT REPLACE,
-          c UNIQUE ON CONFLICT FAIL
+          c INT UNIQUE ON CONFLICT FAIL
         );
         INSERT INTO t1(a,b,c) VALUES(1,2,3), (2,3,4);
         SELECT a,b,c FROM t1 ORDER BY a;
@@ -305,9 +305,9 @@ test:do_execsql_test(
     [[
         DROP TABLE t1;
         CREATE TABLE t1(
-          c UNIQUE ON CONFLICT FAIL,
+          c INT UNIQUE ON CONFLICT FAIL,
           a INT PRIMARY KEY ON CONFLICT REPLACE,
-          b UNIQUE ON CONFLICT IGNORE
+          b INT UNIQUE ON CONFLICT IGNORE
         );
         INSERT INTO t1(a,b,c) VALUES(1,2,3), (2,3,4);
         SELECT a,b,c FROM t1 ORDER BY a;
@@ -356,8 +356,8 @@ test:do_execsql_test(
 test:do_catchsql_test(
     "conflict-7.1",
     [[
-        CREATE TABLE t3(a PRIMARY KEY ON CONFLICT REPLACE,
-                        b UNIQUE ON CONFLICT REPLACE);
+        CREATE TABLE t3(a INT PRIMARY KEY ON CONFLICT REPLACE,
+                        b INT UNIQUE ON CONFLICT REPLACE);
     ]], {
         1, "SQL error: only PRIMARY KEY constraint can have ON CONFLICT REPLACE clause - T3"
     })
@@ -365,8 +365,8 @@ test:do_catchsql_test(
 test:do_catchsql_test(
     "conflict-7.2",
     [[
-        CREATE TABLE t3(a PRIMARY KEY,
-                        b UNIQUE ON CONFLICT REPLACE);
+        CREATE TABLE t3(a INT PRIMARY KEY,
+                        b INT UNIQUE ON CONFLICT REPLACE);
     ]], {
         1, "SQL error: only PRIMARY KEY constraint can have ON CONFLICT REPLACE clause - T3"
     })
@@ -374,9 +374,9 @@ test:do_catchsql_test(
 test:do_catchsql_test(
     "conflict-7.3",
     [[
-        CREATE TABLE t3(a PRIMARY KEY,
-                        b UNIQUE ON CONFLICT REPLACE,
-                        c UNIQUE ON CONFLICT REPLACE);
+        CREATE TABLE t3(a INT PRIMARY KEY,
+                        b INT UNIQUE ON CONFLICT REPLACE,
+                        c INT UNIQUE ON CONFLICT REPLACE);
     ]], {
         1, "SQL error: only PRIMARY KEY constraint can have ON CONFLICT REPLACE clause - T3"
     })
@@ -384,8 +384,8 @@ test:do_catchsql_test(
 test:do_catchsql_test(
     "conflict-7.4",
     [[
-        CREATE TABLE t3(a PRIMARY KEY,
-                        b NOT NULL ON CONFLICT REPLACE DEFAULT 1488);
+        CREATE TABLE t3(a INT PRIMARY KEY,
+                        b INT NOT NULL ON CONFLICT REPLACE DEFAULT 1488);
     ]], {
         1, "SQL error: only PRIMARY KEY constraint can have ON CONFLICT REPLACE clause - T3"
     })
@@ -393,8 +393,8 @@ test:do_catchsql_test(
 test:do_catchsql_test(
     "conflict-7.5",
     [[
-        CREATE TABLE t3(a PRIMARY KEY ON CONFLICT REPLACE,
-                        b NOT NULL ON CONFLICT REPLACE DEFAULT 1488);
+        CREATE TABLE t3(a INT PRIMARY KEY ON CONFLICT REPLACE,
+                        b INT NOT NULL ON CONFLICT REPLACE DEFAULT 1488);
     ]], {
         1, "SQL error: only PRIMARY KEY constraint can have ON CONFLICT REPLACE clause - T3"
     })

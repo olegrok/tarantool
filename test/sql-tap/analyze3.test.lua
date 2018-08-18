@@ -82,7 +82,7 @@ test:do_test(
     "analyze3-1.1.1",
     function()
         test:execsql([[
-            CREATE TABLE t1(id INT PRIMARY KEY, x INTEGER, y);
+            CREATE TABLE t1(id INT PRIMARY KEY, x INTEGER, y INT );
             CREATE INDEX i1 ON t1(x);
             START TRANSACTION;
         ]])
@@ -218,7 +218,7 @@ test:do_test(
 test:do_execsql_test(
     "analyze3-1.2.1",
     [[
-        CREATE TABLE t2(id INTEGER PRIMARY KEY, x TEXT, y);
+        CREATE TABLE t2(id INTEGER PRIMARY KEY, x TEXT, y INT);
         START TRANSACTION;
           INSERT INTO t2 SELECT * FROM t1;
         COMMIT;
@@ -466,7 +466,7 @@ test:do_test(
 --         test:execsql([[
 --             PRAGMA case_sensitive_like=off;
 --             BEGIN;
---             CREATE TABLE t1(a, b TEXT COLLATE nocase);
+--             CREATE TABLE t1(a INT , b TEXT COLLATE nocase);
 --             CREATE INDEX i1 ON t1(b);
 --         ]])
 --         for _ in X(0, "X!for", [=[["set i 0","$i < 1000","incr i"]]=]) do
@@ -594,7 +594,7 @@ test:do_test(
     "analyze3-6.1",
     function()
         test:execsql(" DROP TABLE IF EXISTS t1 ")
-        test:execsql(" CREATE TABLE t1(id INTEGER PRIMARY KEY, a, b, c) ")
+        test:execsql(" CREATE TABLE t1(id INTEGER PRIMARY KEY, a REAL, b TEXT, c REAL) ")
         test:execsql("START TRANSACTION")
         for i=1,1000 do
             test:execsql(string.format("INSERT INTO t1 VALUES(%s, %s, 'x', %s)", i, ((i-1) / 100), ((i-1) / 10)))
@@ -641,7 +641,7 @@ test:do_execsql_test(
     "analyze-7.1",
     [[
         DROP TABLE IF EXISTS t1;
-        CREATE TABLE t1(a INTEGER PRIMARY KEY, b, c);
+        CREATE TABLE t1(a INTEGER PRIMARY KEY, b INT , c INT );
         INSERT INTO t1 VALUES(1,1,'0000');
         CREATE INDEX t0b ON t1(b);
         ANALYZE;

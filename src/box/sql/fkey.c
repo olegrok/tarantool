@@ -779,10 +779,10 @@ fkey_action_trigger(struct Parse *pParse, struct Table *pTab, struct fkey *fkey,
 		 */
 		struct Expr *to_col =
 			sqlite3PExpr(pParse, TK_DOT,
-				     sqlite3ExprAlloc(db, TK_ID, &t_old, 0),
-				     sqlite3ExprAlloc(db, TK_ID, &t_to_col, 0));
+				     sqlite3ExprAlloc(db, TK_ID, 0, &t_old, 0),
+				     sqlite3ExprAlloc(db, TK_ID, 0, &t_to_col, 0));
 		struct Expr *from_col =
-			sqlite3ExprAlloc(db, TK_ID, &t_from_col, 0);
+			sqlite3ExprAlloc(db, TK_ID, 0, &t_from_col, 0);
 		struct Expr *eq = sqlite3PExpr(pParse, TK_EQ, to_col, from_col);
 		where = sqlite3ExprAnd(db, where, eq);
 
@@ -797,12 +797,12 @@ fkey_action_trigger(struct Parse *pParse, struct Table *pTab, struct fkey *fkey,
 		if (is_update) {
 			struct Expr *l, *r;
 			l = sqlite3PExpr(pParse, TK_DOT,
-					 sqlite3ExprAlloc(db, TK_ID, &t_old, 0),
-					 sqlite3ExprAlloc(db, TK_ID, &t_to_col,
+					 sqlite3ExprAlloc(db, TK_ID, 0, &t_old, 0),
+					 sqlite3ExprAlloc(db, TK_ID, 0, &t_to_col,
 							  0));
 			r = sqlite3PExpr(pParse, TK_DOT,
-					 sqlite3ExprAlloc(db, TK_ID, &t_new, 0),
-					 sqlite3ExprAlloc(db, TK_ID, &t_to_col,
+					 sqlite3ExprAlloc(db, TK_ID, 0, &t_new, 0),
+					 sqlite3ExprAlloc(db, TK_ID, 0 ,&t_to_col,
 							  0));
 			eq = sqlite3PExpr(pParse, TK_EQ, l, r);
 			when = sqlite3ExprAnd(db, when, eq);
@@ -814,9 +814,9 @@ fkey_action_trigger(struct Parse *pParse, struct Table *pTab, struct fkey *fkey,
 			if (action == FKEY_ACTION_CASCADE) {
 				new = sqlite3PExpr(pParse, TK_DOT,
 						   sqlite3ExprAlloc(db, TK_ID,
-								    &t_new, 0),
+								    0, &t_new, 0),
 						   sqlite3ExprAlloc(db, TK_ID,
-								    &t_to_col,
+								    0, &t_to_col,
 								    0));
 			} else if (action == FKEY_ACTION_SET_DEFAULT) {
 				d = child_fields[chcol].default_value_expr;
@@ -824,10 +824,10 @@ fkey_action_trigger(struct Parse *pParse, struct Table *pTab, struct fkey *fkey,
 					new = sqlite3ExprDup(db, d, 0);
 				} else {
 					new = sqlite3ExprAlloc(db, TK_NULL,
-							       NULL, 0);
+							       0, NULL, 0);
 				}
 			} else {
-				new = sqlite3ExprAlloc(db, TK_NULL, NULL, 0);
+				new = sqlite3ExprAlloc(db, TK_NULL, 0, NULL, 0);
 			}
 			list = sql_expr_list_append(db, list, new);
 			sqlite3ExprListSetName(pParse, list, &t_from_col, 0);

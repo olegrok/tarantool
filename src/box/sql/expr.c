@@ -87,7 +87,7 @@ sqlite3ExprAffinity(Expr * pExpr)
 #ifndef SQLITE_OMIT_CAST
 	if (op == TK_CAST) {
 		assert(!ExprHasProperty(pExpr, EP_IntValue));
-		return sqlite3AffinityType(pExpr->u.zToken, 0);
+		return pExpr->affinity;
 	}
 #endif
 	if (op == TK_AGG_COLUMN || op == TK_COLUMN) {
@@ -119,7 +119,7 @@ sqlite3ExprAddCollateToken(Parse * pParse,	/* Parsing context */
 {
 	if (pCollName->n > 0) {
 		Expr *pNew =
-		    sqlite3ExprAlloc(pParse->db, TK_COLLATE, pCollName,
+		    sqlite3ExprAlloc(pParse->db, TK_COLLATE, 0, pCollName,
 				     dequote);
 		if (pNew) {
 			pNew->pLeft = pExpr;
@@ -796,6 +796,7 @@ sqlite3ExprSetHeightAndFlags(Parse * pParse, Expr * p)
 Expr *
 sqlite3ExprAlloc(sqlite3 * db,	/* Handle for sqlite3DbMallocRawNN() */
 		 int op,	/* Expression opcode */
+		 enum affinity_type affinity,
 		 const Token * pToken,	/* Token argument.  Might be NULL */
 		 int dequote	/* True to dequote */
     )
@@ -817,6 +818,7 @@ sqlite3ExprAlloc(sqlite3 * db,	/* Handle for sqlite3DbMallocRawNN() */
 		memset(pNew, 0, sizeof(Expr));
 		pNew->op = (u8) op;
 		pNew->iAgg = -1;
+		pNew->affinity = affinity;
 		if (pToken) {
 			if (nExtra == 0) {
 				pNew->flags |= EP_IntValue;
@@ -861,7 +863,7 @@ sqlite3Expr(sqlite3 * db,	/* Handle for sqlite3DbMallocZero() (may be null) */
 	Token x;
 	x.z = zToken;
 	x.n = zToken ? sqlite3Strlen30(zToken) : 0;
-	return sqlite3ExprAlloc(db, op, &x, 0);
+	return sqlite3ExprAlloc(db, op, 0, &x, 0);
 }
 
 /* Allocate a new expression and initialize it as integer.
@@ -1013,10 +1015,10 @@ sqlite3ExprAnd(sqlite3 * db, Expr * pLeft, Expr * pRight)
 	} else if (exprAlwaysFalse(pLeft) || exprAlwaysFalse(pRight)) {
 		sql_expr_delete(db, pLeft, false);
 		sql_expr_delete(db, pRight, false);
-		return sqlite3ExprAlloc(db, TK_INTEGER, &sqlite3IntTokens[0],
+		return sqlite3ExprAlloc(db, TK_INTEGER, 0, &sqlite3IntTokens[0],
 					0);
 	} else {
-		Expr *pNew = sqlite3ExprAlloc(db, TK_AND, 0, 0);
+		Expr *pNew = sqlite3ExprAlloc(db, TK_AND, 0, 0, 0);
 		sqlite3ExprAttachSubtrees(db, pNew, pLeft, pRight);
 		return pNew;
 	}
@@ -1032,7 +1034,7 @@ sqlite3ExprFunction(Parse * pParse, ExprList * pList, Token * pToken)
 	Expr *pNew;
 	sqlite3 *db = pParse->db;
 	assert(pToken);
-	pNew = sqlite3ExprAlloc(db, TK_FUNCTION, pToken, 1);
+	pNew = sqlite3ExprAlloc(db, TK_FUNCTION, 0, pToken, 1);
 	if (pNew == 0) {
 		sql_expr_list_delete(db, pList);	/* Avoid memory leak when malloc fails */
 		return 0;
@@ -2314,11 +2316,12 @@ sqlite3FindInIndex(Parse * pParse,	/* Parsing context */
 		   u32 inFlags,	/* IN_INDEX_LOOP, _MEMBERSHIP, and/or _NOOP_OK */
 		   int *prRhsHasNull,	/* Register holding NULL status.  See notes */
 		   int *aiMap,	/* Mapping from Index fields to RHS fields */
-		   int *pSingleIdxCol	/* Tarantool. In case (nExpr == 1) it is meant by SQLite that
+		   int *pSingleIdxCol,	/* Tarantool. In case (nExpr == 1) it is meant by SQLite that
 					   column of interest is always 0, since index columns appear first
 					   in index. This is not the case for Tarantool, where index columns
 					   don't change order of appearance.
 					   So, use this field to store single column index.  */
+		   struct Index **pUseIdx  /* Index to use. */
     )
 {
 	Select *p;		/* SELECT to the right of IN operator */
@@ -2326,6 +2329,8 @@ sqlite3FindInIndex(Parse * pParse,	/* Parsing context */
 	int iTab = pParse->nTab++;	/* Cursor of the RHS table */
 	int mustBeUnique;	/* True if RHS must be unique */
 	Vdbe *v = sqlite3GetVdbe(pParse);	/* Virtual machine being coded */
+	if (pUseIdx)
+		*pUseIdx = NULL;
 
 	assert(pX->op == TK_IN);
 	mustBeUnique = (inFlags & IN_INDEX_LOOP) != 0;
@@ -2465,6 +2470,8 @@ sqlite3FindInIndex(Parse * pParse,	/* Parsing context */
 				       || colUsed != (MASKBIT(nExpr) - 1));
 				if (colUsed == (MASKBIT(nExpr) - 1)) {
 					/* If we reach this point, that means the index pIdx is usable */
+					if (pUseIdx)
+						*pUseIdx = pIdx;
 					int iAddr = sqlite3VdbeAddOp0(v, OP_Once);
 					VdbeCoverage(v);
 					sqlite3VdbeAddOp4(v, OP_Explain,
@@ -2882,7 +2889,7 @@ sqlite3CodeSubselect(Parse * pParse,	/* Parsing context */
 			if (pSel->pLimit == NULL) {
 				pSel->pLimit =
 					sqlite3ExprAlloc(pParse->db, TK_INTEGER,
-							 &sqlite3IntTokens[1],
+							 0, &sqlite3IntTokens[1],
 							 0);
 				if (pSel->pLimit != NULL) {
 					ExprSetProperty(pSel->pLimit,
@@ -2985,6 +2992,7 @@ sqlite3ExprCodeIN(Parse * pParse,	/* Parsing and code generating context */
 	int addrTruthOp;	/* Address of opcode that determines the IN is true */
 	int destNotNull;	/* Jump here if a comparison is not true in step 6 */
 	int addrTop;		/* Top of the step-6 loop */
+	struct Index *pUseIndex; /* Index to use. */
 
 	pLeft = pExpr->pLeft;
 	if (sqlite3ExprCheckIN(pParse, pExpr))
@@ -3009,7 +3017,7 @@ sqlite3ExprCodeIN(Parse * pParse,	/* Parsing and code generating context */
 	eType = sqlite3FindInIndex(pParse, pExpr,
 				   IN_INDEX_MEMBERSHIP | IN_INDEX_NOOP_OK,
 				   destIfFalse == destIfNull ? 0 : &rRhsHasNull,
-				   aiMap, 0);
+				   aiMap, 0, &pUseIndex);
 
 	assert(pParse->nErr || nVector == 1 || eType == IN_INDEX_EPH
 	       || eType == IN_INDEX_INDEX_ASC || eType == IN_INDEX_INDEX_DESC);
@@ -3132,14 +3140,14 @@ sqlite3ExprCodeIN(Parse * pParse,	/* Parsing and code generating context */
 	sqlite3VdbeAddOp4(v, OP_Affinity, rLhs, nVector, 0, zAff,
 			  nVector);
 	if ((pExpr->flags & EP_xIsSelect)
-	    && !pExpr->is_ephemeral) {
+	    && !pExpr->is_ephemeral && pUseIndex != NULL) {
 		struct SrcList *src_list = pExpr->x.pSelect->pSrc;
 		assert(src_list->nSrc == 1);
 
 		struct Table *tab = src_list->a[0].pTab;
 		assert(tab != NULL);
 
-		struct Index *pk = sqlite3PrimaryKeyIndex(tab);
+		struct Index *pk = pUseIndex;
 		assert(pk);
 
 		uint32_t fieldno = pk->def->key_def->parts[0].fieldno;
@@ -3780,9 +3788,7 @@ sqlite3ExprCodeTarget(Parse * pParse, Expr * pExpr, int target)
 				sqlite3VdbeAddOp2(v, OP_SCopy, inReg, target);
 				inReg = target;
 			}
-			sqlite3VdbeAddOp2(v, OP_Cast, target,
-					  sqlite3AffinityType(pExpr->u.zToken,
-							      0));
+			sqlite3VdbeAddOp2(v, OP_Cast, target, pExpr->affinity);
 			testcase(usedAsColumnCache(pParse, inReg, inReg));
 			sqlite3ExprCacheAffinityChange(pParse, inReg, 1);
 			return inReg;

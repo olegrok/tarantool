@@ -486,7 +486,7 @@ lookupName(Parse * pParse,	/* The parsing context */
 Expr *
 sqlite3CreateColumnExpr(sqlite3 * db, SrcList * pSrc, int iSrc, int iCol)
 {
-	Expr *p = sqlite3ExprAlloc(db, TK_COLUMN, 0, 0);
+	Expr *p = sqlite3ExprAlloc(db, TK_COLUMN, 0, 0, 0);
 	if (p) {
 		struct SrcList_item *pItem = &pSrc->a[iSrc];
 		p->space_def = pItem->pTab->def;

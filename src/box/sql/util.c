@@ -782,6 +782,14 @@ sqlite3Atoi(const char *z)
 	return x;
 }
 
+int
+sqlite3TokenToLong(Token *token, long *value)
+{
+	char *end;
+	*value = strtol(token->z, &end, 10);
+	return 0;
+}
+
 /*
  * The variable-length integer encoding is as follows:
  *
