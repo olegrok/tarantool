@@ -986,6 +986,7 @@ box.schema.index.create = function(space_id, name, options)
     local type_dependent_defaults = {
         rtree = {parts = { 2, 'array' }, unique = false},
         bitset = {parts = { 2, 'unsigned' }, unique = false},
+        zcurve = {parts = { 1, 'unsigned' }, unique = false},
         other = {parts = { 1, 'unsigned' }, unique = true},
     }
     options_defaults = type_dependent_defaults[options.type]
