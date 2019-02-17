@@ -83,6 +83,7 @@ add_library(box STATIC
     memtx_tree.c
     memtx_rtree.c
     memtx_bitset.c
+    memtx_zcurve.c
     engine.c
     memtx_engine.c
     memtx_space.c

@@ -35,7 +35,7 @@
 #include "json/json.h"
 #include "fiber.h"
 
-const char *index_type_strs[] = { "HASH", "TREE", "BITSET", "RTREE" };
+const char *index_type_strs[] = { "HASH", "TREE", "BITSET", "RTREE", "ZCURVE" };
 
 const char *rtree_index_distance_type_strs[] = { "EUCLID", "MANHATTAN" };
 

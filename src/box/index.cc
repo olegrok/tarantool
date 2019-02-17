@@ -75,7 +75,7 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
 		 * - ITER_ALL iterator type, all index types
 		 * - ITER_GT iterator in HASH index (legacy)
 		 */
-		if (index_def->type == TREE || type == ITER_ALL ||
+		if (index_def->type == TREE || index_def->type == ZCURVE || type == ITER_ALL ||
 		    (index_def->type == HASH && type == ITER_GT))
 			return 0;
 		/* Fall through. */
@@ -119,7 +119,7 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
 		}
 
 		/* Partial keys are allowed only for TREE index type. */
-		if (index_def->type != TREE && part_count < index_def->key_def->part_count) {
+		if ((index_def->type != TREE && index_def->type != ZCURVE) && part_count < index_def->key_def->part_count) {
 			diag_set(ClientError, ER_PARTIAL_KEY,
 				 index_type_strs[index_def->type],
 				 index_def->key_def->part_count,
@@ -263,7 +263,7 @@ box_index_min(uint32_t space_id, uint32_t index_id, const char *key,
 	struct index *index;
 	if (check_index(space_id, index_id, &space, &index) != 0)
 		return -1;
-	if (index->def->type != TREE) {
+	if (index->def->type != TREE && index->def->type != ZCURVE) {
 		/* Show nice error messages in Lua. */
 		diag_set(UnsupportedIndexFeature, index->def, "min()");
 		return -1;
@@ -295,7 +295,7 @@ box_index_max(uint32_t space_id, uint32_t index_id, const char *key,
 	struct index *index;
 	if (check_index(space_id, index_id, &space, &index) != 0)
 		return -1;
-	if (index->def->type != TREE) {
+	if (index->def->type != TREE && index->def->type != ZCURVE) {
 		/* Show nice error messages in Lua. */
 		diag_set(UnsupportedIndexFeature, index->def, "max()");
 		return -1;
