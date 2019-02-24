@@ -51,6 +51,9 @@ struct BIT_ARRAY
 // Constructor - create a new bit array of length nbits
 BIT_ARRAY* bit_array_create(bit_index_t nbits);
 
+// Constructor - create a new bit array for 64-bit word
+BIT_ARRAY* bit_array_create_word64(uint64_t word);
+
 // Destructor - free the memory used for a bit array
 void bit_array_free(BIT_ARRAY* bitarray);
 

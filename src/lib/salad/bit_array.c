@@ -533,6 +533,28 @@ BIT_ARRAY* bit_array_create(bit_index_t nbits)
   return bitarr;
 }
 
+BIT_ARRAY* bit_array_create_word64(uint64_t word)
+{
+  BIT_ARRAY* bitarr = (BIT_ARRAY*)malloc(sizeof(BIT_ARRAY));
+
+  // error if could not allocate enough memory
+  if(bitarr == NULL || bit_array_alloc(bitarr, sizeof(uint64_t) * CHAR_BIT) == NULL)
+  {
+    if(bitarr != NULL) free(bitarr);
+    errno = ENOMEM;
+    return NULL;
+  }
+
+  DEBUG_PRINT("Creating BIT_ARRAY (bits: %lu; allocated words: %lu; "
+              "using words: %lu; WORD_SIZE: %i)\n",
+              (unsigned long)nbits, (unsigned long)bitarr->capacity_in_words,
+              (unsigned long)roundup_bits2words64(nbits), (int)WORD_SIZE);
+
+  DEBUG_VALIDATE(bitarr);
+  _set_word(bitarr, 0, word);
+  return bitarr;
+}
+
 //
 // Destructor
 //
