@@ -35,6 +35,7 @@
 
 #include "index.h"
 #include "memtx_engine.h"
+#include <salad/bit_array.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -48,7 +49,7 @@ struct memtx_engine;
 struct memtx_zcurve_key_data
 {
     /** Sequence of msgpacked search fields */
-    const char *key;
+    BIT_ARRAY *key;
     /** Number of msgpacked search fields */
     uint32_t part_count;
 };
@@ -59,14 +60,14 @@ struct memtx_zcurve_key_data
 struct memtx_zcurve_element
 {
     /** Z-address. Read here: https://en.wikipedia.org/wiki/Z-order_curve */
-    const char *z_address;
+    BIT_ARRAY *z_address;
     struct tuple *tuple;
 };
 
 /**
  * BPS tree element vs key comparator.
  * Defined in header in order to allow compiler to inline it.
- * @param tuple - tuple to compare.
+ * @param element - tuple with key to compare.
  * @param key_data - key to compare with.
  * @param def - key definition.
  * @retval 0  if tuple == key in terms of def.
@@ -74,21 +75,42 @@ struct memtx_zcurve_element
  * @retval >0 if tuple > key in terms of def.
  */
 static inline int
-memtx_zcurve_compare_key(const struct tuple *tuple,
+ memtx_zcurve_compare_key(const struct memtx_zcurve_element *element,
                        const struct memtx_zcurve_key_data *key_data,
                        struct key_def *def)
 {
-    return tuple_compare_with_key(tuple, key_data->key,
-                                  key_data->part_count, def);
+    (void)def;
+    (void)element;
+    (void)key_data;
+    printf("element %p\n", element);
+    printf("element->z_address %p\n", element->z_address);
+    fflush(stdout);
+    bit_array_print(element->z_address, stdout);
+    printf("elem_b ");
+    bit_array_print(key_data->key, stdout);
+    return bit_array_cmp(element->z_address, key_data->key);
+}
+
+static inline int
+memtx_zcurve_elem_compare(const struct memtx_zcurve_element *elem_a,
+                        const struct memtx_zcurve_element *elem_b,
+                        struct key_def *key_def)
+{
+    (void)key_def;
+    printf("elem_a ");
+    fflush(stdout);
+    bit_array_print(elem_a->z_address, stdout);
+    printf("elem_b ");
+    bit_array_print(elem_b->z_address, stdout);
+    return bit_array_cmp(elem_a->z_address, elem_b->z_address);
 }
 
 #define BPS_TREE_NAME memtx_zcurve
 #define BPS_TREE_BLOCK_SIZE (512)
 #define BPS_TREE_EXTENT_SIZE MEMTX_EXTENT_SIZE
-#define BPS_TREE_COMPARE(a, b, arg) tuple_compare(a, b, arg)
+#define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(a, b, arg)
 #define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(a, b, arg)
-//#define bps_tree_elem_t struct memtx_zcurve_element *
-#define bps_tree_elem_t struct tuple *
+#define bps_tree_elem_t struct memtx_zcurve_element *
 #define bps_tree_key_t struct memtx_zcurve_key_data *
 #define bps_tree_arg_t struct key_def *
 
@@ -106,7 +128,7 @@ memtx_zcurve_compare_key(const struct tuple *tuple,
 struct memtx_zcurve_index {
     struct index base;
     struct memtx_zcurve tree;
-    struct tuple **build_array;
+    struct memtx_zcurve_element **build_array;
     size_t build_array_size, build_array_alloc_size;
     struct memtx_gc_task gc_task;
     struct memtx_zcurve_iterator gc_iterator;
