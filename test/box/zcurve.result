@@ -1,0 +1,266 @@
+-------------------------------------------------------------------------------
+-- single-part (unsigned)
+-------------------------------------------------------------------------------
+space = box.schema.space.create('uint', { engine = 'memtx' })
+---
+...
+pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'unsigned'}, unique = true})
+---
+...
+for i=1,9 do space:replace{i} end
+---
+...
+pk:select({}, { iterator = 'ALL' })
+---
+- - [1]
+  - [2]
+  - [3]
+  - [4]
+  - [5]
+  - [6]
+  - [7]
+  - [8]
+  - [9]
+...
+pk:select({}, { iterator = 'EQ' })
+---
+- - [1]
+  - [2]
+  - [3]
+  - [4]
+  - [5]
+  - [6]
+  - [7]
+  - [8]
+  - [9]
+...
+pk:select({}, { iterator = 'REQ' })
+---
+- - [9]
+  - [8]
+  - [7]
+  - [6]
+  - [5]
+  - [4]
+  - [3]
+  - [2]
+  - [1]
+...
+pk:select({}, { iterator = 'GE' })
+---
+- - [1]
+  - [2]
+  - [3]
+  - [4]
+  - [5]
+  - [6]
+  - [7]
+  - [8]
+  - [9]
+...
+pk:select({}, { iterator = 'GT' })
+---
+- - [1]
+  - [2]
+  - [3]
+  - [4]
+  - [5]
+  - [6]
+  - [7]
+  - [8]
+  - [9]
+...
+pk:select({}, { iterator = 'LE' })
+---
+- - [9]
+  - [8]
+  - [7]
+  - [6]
+  - [5]
+  - [4]
+  - [3]
+  - [2]
+  - [1]
+...
+pk:select({}, { iterator = 'LT' })
+---
+- - [9]
+  - [8]
+  - [7]
+  - [6]
+  - [5]
+  - [4]
+  - [3]
+  - [2]
+  - [1]
+...
+pk:select({0}, { iterator = 'EQ' })
+---
+- []
+...
+pk:select({0}, { iterator = 'REQ' })
+---
+- []
+...
+pk:select({0}, { iterator = 'LE' })
+---
+- []
+...
+pk:select({0}, { iterator = 'LT' })
+---
+- []
+...
+pk:select({1}, { iterator = 'EQ' })
+---
+- - [1]
+...
+pk:select({1}, { iterator = 'REQ' })
+---
+- - [1]
+...
+pk:select({1}, { iterator = 'LE' })
+---
+- - [1]
+...
+pk:select({1}, { iterator = 'LT' })
+---
+- []
+...
+pk:select({5}, { iterator = 'EQ' })
+---
+- - [5]
+...
+pk:select({5}, { iterator = 'REQ' })
+---
+- - [5]
+...
+pk:select({5}, { iterator = 'GE' })
+---
+- - [5]
+  - [6]
+  - [7]
+  - [8]
+  - [9]
+...
+pk:select({5}, { iterator = 'GT' })
+---
+- - [6]
+  - [7]
+  - [8]
+  - [9]
+...
+pk:select({5}, { iterator = 'LE' })
+---
+- - [5]
+  - [4]
+  - [3]
+  - [2]
+  - [1]
+...
+pk:select({5}, { iterator = 'LT' })
+---
+- - [4]
+  - [3]
+  - [2]
+  - [1]
+...
+pk:select({9}, { iterator = 'EQ' })
+---
+- - [9]
+...
+pk:select({9}, { iterator = 'REQ' })
+---
+- - [9]
+...
+pk:select({9}, { iterator = 'GE' })
+---
+- - [9]
+...
+pk:select({9}, { iterator = 'GT' })
+---
+- []
+...
+pk:select({10}, { iterator = 'EQ' })
+---
+- []
+...
+pk:select({10}, { iterator = 'REQ' })
+---
+- []
+...
+pk:select({10}, { iterator = 'GE' })
+---
+- []
+...
+pk:select({10}, { iterator = 'GT' })
+---
+- []
+...
+pk:get({})
+---
+- error: Invalid key part count in an exact match (expected 1, got 0)
+...
+pk:get({0})
+---
+...
+pk:get({5})
+---
+- [5]
+...
+pk:get({10})
+---
+...
+pk:get({10, 15})
+---
+- error: Invalid key part count in an exact match (expected 1, got 2)
+...
+space:drop()
+---
+...
+space = nil
+---
+...
+pk = nil
+---
+...
+-------------------------------------------------------------------------------
+-- multi-part (unsigned + unsigned)
+-------------------------------------------------------------------------------
+space = box.schema.space.create('multi', { engine = 'memtx' })
+---
+...
+pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'unsigned', 2, 'unsigned'}, unique = true})
+---
+...
+space:replace{2, 4}
+---
+- [2, 4]
+...
+space:replace{2, 5}
+---
+- [2, 5]
+...
+space:replace{3, 5}
+---
+- [3, 5]
+...
+space:replace{3, 4}
+---
+- [3, 4]
+...
+space:select{}
+---
+- - [2, 4]
+  - [3, 4]
+  - [2, 5]
+  - [3, 5]
+...
+space:drop()
+---
+...
+space = nil
+---
+...
+pk = nil
+---
+...
