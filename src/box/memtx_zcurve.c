@@ -190,19 +190,45 @@ ones(uint32_t part_count) {
 // the isRelevant function tells us whether the test address falls within
 // the query rectangle created by the minimum and maximum Z-addresses.
 static bool
-is_relevant(BIT_ARRAY* min, BIT_ARRAY* max, BIT_ARRAY* test) {
+is_relevant(BIT_ARRAY* min, BIT_ARRAY* max, BIT_ARRAY* test, struct index_def* index_def) {
     size_t len = bit_array_length(min);
     assert(len == bit_array_length(max));
     assert(len == bit_array_length(test));
 
-    for (size_t i = 0; i < len; i++) {
-        if (!(bit_array_get_bit(min, i) <= bit_array_get_bit(test, i)
-            && bit_array_get_bit(test, i) <= bit_array_get_bit(max, i))) {
-            return false;
-        }
-    }
+    uint32_t dim = index_def->key_def->part_count;
+	// TODO: move grid to key_def
+    BIT_ARRAY* grid[dim];
+	for (uint32_t i = 0; i < dim; ++i) {
+		grid[i] = bit_array_create(len);
+		for (int j = 0; j < 64; ++j) {
+			bit_array_set_bit(grid[i], dim * j);
+		}
+		bit_array_shift_left(grid[i], i, 0);
+	}
 
-    return  true;
+	BIT_ARRAY *low, *high, *test_grid;
+	low = bit_array_create(len);
+	high = bit_array_create(len);
+	test_grid = bit_array_create(len);
+	bool result = true;
+
+	for (uint32_t i = 0; i < dim; ++i) {
+		bit_array_and(low, grid[i], min);
+		bit_array_and(test_grid, grid[i], test);
+		bit_array_and(high, grid[i], max);
+		if (bit_array_cmp(low, test_grid) > 0 || bit_array_cmp(test_grid, high) > 0) {
+			result = false;
+			break;
+		}
+	}
+
+	bit_array_free(low);
+	bit_array_free(high);
+	bit_array_free(test_grid);
+	for (uint32_t i = 0; i < dim; ++i) {
+		bit_array_free(grid[i]);
+	}
+	return result;
 }
 
 static BIT_ARRAY*
@@ -409,7 +435,7 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 		it->current = *res;
 		if (it->key_data.z_address_end != NULL) {
 			if (is_relevant(it->key_data.z_address, it->key_data.z_address_end,
-					it->current.z_address)) {
+					it->current.z_address, it->index_def)) {
 				printf("relevant %s\n", tuple_str(it->current.tuple));
 			}
 //			printf("%s\n", tuple_str(it->current.tuple));
