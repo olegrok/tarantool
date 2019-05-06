@@ -108,11 +108,6 @@ memtx_zcurve_elem_compare(const struct memtx_zcurve_data *elem_a,
                           struct key_def *key_def)
 {
     (void)key_def;
-    printf("elem_a ");
-    fflush(stdout);
-    bit_array_print(elem_a->z_address, stdout);
-    printf("elem_b ");
-    bit_array_print(elem_b->z_address, stdout);
     return bit_array_cmp(elem_a->z_address, elem_b->z_address);
 }
 
@@ -160,15 +155,9 @@ memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 {
 	const struct memtx_zcurve_data *data_a = a;
 	const struct memtx_zcurve_data *data_b = b;
-	struct key_def *key_def = c;
-	assert(data_a != NULL);
-	assert(data_a->z_address != NULL);
-	assert(data_b != NULL);
-	assert(data_b->z_address != NULL);
-    (void)key_def;
-    printf("data_a tuple: %s\n", tuple_str(data_a->tuple));
-    printf("data_a tuple: %s\n", tuple_str(data_b->tuple));
-    fflush(stdout);
+	(void)c;
+	assert(data_a != NULL && data_a->z_address != NULL);
+	assert(data_b != NULL && data_b->z_address != NULL);
 	return bit_array_cmp(data_a->z_address, data_b->z_address);
 }
 
@@ -436,12 +425,7 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 		if (it->key_data.z_address_end != NULL) {
 			if (is_relevant(it->key_data.z_address, it->key_data.z_address_end,
 					it->current.z_address, it->index_def)) {
-				printf("relevant %s\n", tuple_str(it->current.tuple));
 			}
-//			printf("%s\n", tuple_str(it->current.tuple));
-//			bit_array_print(it->key_data.z_address, stdout);
-//			bit_array_print(it->current.z_address, stdout);
-//			bit_array_print(it->key_data.z_address_end, stdout);
 		}
 
 	}
@@ -453,8 +437,7 @@ tree_iterator_prev(struct iterator *iterator, struct tuple **ret)
 {
     printf("tree_iterator_prev\n");
 	struct tree_iterator *it = tree_iterator(iterator);
-	assert(it->current.tuple != NULL);
-	assert(it->current.z_address != NULL);
+	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
@@ -483,8 +466,7 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 {
     printf("tree_iterator_next_equal\n");
 	struct tree_iterator *it = tree_iterator(iterator);
-	assert(it->current.tuple != NULL);
-    assert(it->current.z_address != NULL);
+	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
@@ -531,10 +513,7 @@ tree_iterator_prev_equal(struct iterator *iterator, struct tuple **ret)
 {
     printf("tree_iterator_prev_equal\n");
 	struct tree_iterator *it = tree_iterator(iterator);
-	assert(it->current.tuple != NULL);
-    assert(it->current.z_address != NULL);
-    printf("tuple %s\n", tuple_str(it->current.tuple));
-    bit_array_print(it->current.z_address, stdout);
+	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
@@ -566,8 +545,7 @@ static void
 tree_iterator_set_next_method(struct tree_iterator *it)
 {
     printf("tree_iterator_set_next_method %d\n", it->type);
-	assert(it->current.tuple != NULL);
-    assert(it->current.z_address != NULL);
+	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	switch (it->type) {
 	case ITER_EQ:
 		it->base.next = tree_iterator_next_equal;
