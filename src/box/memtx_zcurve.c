@@ -50,6 +50,7 @@ struct memtx_zcurve_key_data {
 	uint32_t part_count;
     /** */
 	BIT_ARRAY *z_address;
+	BIT_ARRAY *z_address_end;
 };
 
 /**
@@ -162,38 +163,47 @@ memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 	struct key_def *key_def = c;
 	assert(data_a != NULL);
 	assert(data_a->z_address != NULL);
-	assert(data_a->tuple != NULL);
 	assert(data_b != NULL);
 	assert(data_b->z_address != NULL);
-	assert(data_b->tuple != NULL);
     (void)key_def;
-    printf("data_a %p\n", data_a);
-    printf("data_b %p\n", data_b);
-    printf("data_b z_address %p\n", data_b->z_address);
     printf("data_a tuple: %s\n", tuple_str(data_a->tuple));
     printf("data_a tuple: %s\n", tuple_str(data_b->tuple));
     fflush(stdout);
 	return bit_array_cmp(data_a->z_address, data_b->z_address);
 }
 
+static BIT_ARRAY*
+zeros(uint32_t part_count) {
+    BIT_ARRAY* result = bit_array_create(part_count * 64);
+    bit_array_clear_all(result);
+    return result;
+}
+
+static BIT_ARRAY*
+ones(uint32_t part_count) {
+    BIT_ARRAY* result = bit_array_create(part_count * 64);
+    bit_array_set_all(result);
+    return result;
+}
+
 // Provided a minimum Z-address, a maximum Z-address, and a test Z-address,
 // the isRelevant function tells us whether the test address falls within
 // the query rectangle created by the minimum and maximum Z-addresses.
-//static bool
-//is_relevant(BIT_ARRAY* min, BIT_ARRAY* max, BIT_ARRAY* test) {
-//    size_t len = bit_array_length(min);
-//    assert(len == bit_array_length(max));
-//    assert(len == bit_array_length(test));
-//
-//    for (size_t i = 0; i < len; i++) {
-//        if (!(bit_array_get_bit(min, i) <= bit_array_get_bit(test, i)
-//            && bit_array_get_bit(test, i) <= bit_array_get_bit(max, i))) {
-//            return false;
-//        }
-//    }
-//
-//    return  true;
-//}
+static bool
+is_relevant(BIT_ARRAY* min, BIT_ARRAY* max, BIT_ARRAY* test) {
+    size_t len = bit_array_length(min);
+    assert(len == bit_array_length(max));
+    assert(len == bit_array_length(test));
+
+    for (size_t i = 0; i < len; i++) {
+        if (!(bit_array_get_bit(min, i) <= bit_array_get_bit(test, i)
+            && bit_array_get_bit(test, i) <= bit_array_get_bit(max, i))) {
+            return false;
+        }
+    }
+
+    return  true;
+}
 
 static BIT_ARRAY*
 interleave_keys(BIT_ARRAY** const keys, size_t size) {
@@ -206,6 +216,64 @@ interleave_keys(BIT_ARRAY** const keys, size_t size) {
             }
         }
     }
+    return result;
+}
+
+static BIT_ARRAY*
+mp_decode_part(const char *mp, uint32_t part_count,
+               const struct index_def *index_def, uint32_t even) {
+    BIT_ARRAY* key_parts[part_count / 2];
+    for (uint32_t j = 0; j < part_count; ++j) {
+        uint32_t i = j / 2;
+        if (j % 2 != even) {
+            mp_next(&mp);
+            continue;
+        }
+        if (mp_typeof(*mp) == MP_NIL) {
+            if (j % 2 == 0) {
+                key_parts[i] = zeros(1);
+            } else {
+                key_parts[i] = ones(1);
+            }
+        } else {
+            switch (index_def->key_def->parts->type) {
+                case FIELD_TYPE_UNSIGNED: {
+                    uint64_t value = mp_decode_uint(&mp);
+                    key_parts[i] = bit_array_create_word64(value);
+                    break;
+                }
+                case FIELD_TYPE_INTEGER: {
+                    int64_t value = mp_decode_int(&mp);
+                    uint64_t* u_value = (void*)(&value);
+                    key_parts[i] = bit_array_create_word64(*u_value);
+                    bit_array_toggle_bit(key_parts[i], 63);
+                    break;
+                }
+                case FIELD_TYPE_NUMBER: {
+                    double value = mp_decode_double(&mp);
+                    uint64_t* u_value = (void*)(&value);
+                    key_parts[i] = bit_array_create_word64(*u_value);
+                    bit_array_toggle_bit(key_parts[i], 63);
+                    break;
+                }
+                case FIELD_TYPE_STRING: {
+                    uint32_t value_len = sizeof(uint64_t);
+                    const char* value = mp_decode_str(&mp, &value_len);
+                    // TODO: copy first four bytes
+                    uint64_t* u_value = (void*)(&value);
+                    key_parts[i] = bit_array_create_word64(*u_value);
+                    break;
+                }
+                default:
+                    assert(false);
+            }
+        }
+    }
+    BIT_ARRAY* result = interleave_keys(key_parts, part_count / 2);
+    for (uint32_t i = 0; i < part_count / 2; ++i) {
+        bit_array_free(key_parts[i]);
+    }
+    bit_array_print(result, stdout);
     return result;
 }
 
@@ -263,20 +331,6 @@ extract_zaddress(struct tuple *tuple, const struct index_def *index_def) {
     return mp_decode_key(key, index_def->key_def->part_count, index_def);
 }
 
-//static BIT_ARRAY*
-//zeros(uint32_t part_count) {
-//    BIT_ARRAY* result = bit_array_create(part_count * 64);
-//    bit_array_clear_all(result);
-//    return result;
-//}
-
-//static BIT_ARRAY*
-//ones(uint32_t part_count) {
-//    BIT_ARRAY* result = bit_array_create(part_count * 64);
-//    bit_array_set_all(result);
-//    return result;
-//}
-
 /* {{{ MemtxTree Iterators ****************************************/
 struct tree_iterator {
 	struct iterator base;
@@ -290,9 +344,10 @@ struct tree_iterator {
 	struct mempool *pool;
 };
 
-static_assert(sizeof(struct tree_iterator) <= MEMTX_ITERATOR_SIZE,
-	      "sizeof(struct tree_iterator) must be less than or equal "
-	      "to MEMTX_ITERATOR_SIZE");
+// TODO:
+//static_assert(sizeof(struct tree_iterator) <= MEMTX_ITERATOR_SIZE,
+//	      "sizeof(struct tree_iterator) must be less than or equal "
+//	      "to MEMTX_ITERATOR_SIZE");
 
 static void
 tree_iterator_free(struct iterator *iterator);
@@ -317,6 +372,7 @@ tree_iterator_free(struct iterator *iterator)
 static int
 tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 {
+    printf("tree_iterator_dummie\n");
 	(void)iterator;
 	*ret = NULL;
 	return 0;
@@ -325,6 +381,7 @@ tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 static int
 tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 {
+//    printf("tree_iterator_next\n");
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL);
     assert(it->current.z_address != NULL);
@@ -340,7 +397,8 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 	tuple_unref(it->current.tuple);
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (res == NULL) {
+	if (res == NULL || (it->key_data.z_address_end != NULL &&
+			bit_array_cmp(res->z_address, it->key_data.z_address_end) > 0)) {
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
 		it->current.z_address = NULL;
@@ -349,6 +407,17 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 		*ret = res->tuple;
 		tuple_ref(*ret);
 		it->current = *res;
+		if (it->key_data.z_address_end != NULL) {
+			if (is_relevant(it->key_data.z_address, it->key_data.z_address_end,
+					it->current.z_address)) {
+				printf("relevant %s\n", tuple_str(it->current.tuple));
+			}
+//			printf("%s\n", tuple_str(it->current.tuple));
+//			bit_array_print(it->key_data.z_address, stdout);
+//			bit_array_print(it->current.z_address, stdout);
+//			bit_array_print(it->key_data.z_address_end, stdout);
+		}
+
 	}
 	return 0;
 }
@@ -386,6 +455,7 @@ tree_iterator_prev(struct iterator *iterator, struct tuple **ret)
 static int
 tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 {
+    printf("tree_iterator_next_equal\n");
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL);
     assert(it->current.z_address != NULL);
@@ -401,18 +471,31 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	/* Use user key def to save a few loops. */
-	if (res == NULL ||
-            memtx_zcurve_compare_key(res,
-					  &it->key_data,
-					  it->index_def->key_def) != 0) {
-		iterator->next = tree_iterator_dummie;
-		it->current.tuple = NULL;
-		it->current.z_address = NULL;
-		*ret = NULL;
+	// TODO: check that value is relevant and not at the end
+	if (it->key_data.z_address_end == NULL) {
+	    if (res == NULL ||
+	    		memtx_zcurve_compare_key(res,
+						  &it->key_data,
+						  it->index_def->key_def) != 0) {
+			iterator->next = tree_iterator_dummie;
+			it->current.tuple = NULL;
+			it->current.z_address = NULL;
+			*ret = NULL;
+		} else {
+			*ret = res->tuple;
+			tuple_ref(*ret);
+			it->current = *res;
+		}
 	} else {
-		*ret = res->tuple;
-		tuple_ref(*ret);
-		it->current = *res;
+//		if (res == NULL ||
+//			bit_array_cmp(res->z_address, it->key_data.z_address_end) < 0) {
+				iterator->next = tree_iterator_dummie;
+				it->current.tuple = NULL;
+				it->current.z_address = NULL;
+				*ret = NULL;
+//		} else {
+//
+//		}
 	}
 	return 0;
 }
@@ -456,6 +539,7 @@ tree_iterator_prev_equal(struct iterator *iterator, struct tuple **ret)
 static void
 tree_iterator_set_next_method(struct tree_iterator *it)
 {
+    printf("tree_iterator_set_next_method %d\n", it->type);
 	assert(it->current.tuple != NULL);
     assert(it->current.z_address != NULL);
 	switch (it->type) {
@@ -690,7 +774,7 @@ memtx_zcurve_index_get(struct index *base, const char *key,
 	key_data.part_count = part_count;
 	struct memtx_zcurve_data *res = memtx_zcurve_find(&index->tree, &key_data);
 	*result = res != NULL ? res->tuple : NULL;
-	// TODO: may be free?
+	bit_array_free(key_data.z_address);
 	return 0;
 }
 
@@ -781,8 +865,15 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->type = type;
     // FIXME: Check that it works
 	it->key_data.key = key;
-	it->key_data.z_address = mp_decode_key(key, part_count, index->base.def);
-//	it->key_data.key = ones(part_count);
+	printf("%d %d\n", base->def->key_def->part_count, part_count);
+	if (base->def->key_def->part_count == part_count) {
+        it->key_data.z_address = mp_decode_key(key, part_count, index->base.def);
+        it->key_data.z_address_end = NULL;
+	} else if (base->def->key_def->part_count * 2 == part_count) {
+        it->key_data.z_address = mp_decode_part(key, part_count, index->base.def, 0);
+        it->key_data.z_address_end = mp_decode_part(key, part_count, index->base.def, 1);
+	}
+
 	it->key_data.part_count = part_count;
 	it->index_def = base->def;
 	it->tree = &index->tree;

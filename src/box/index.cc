@@ -111,6 +111,25 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
 				mp_next(&key);
 			}
 		}
+	} else if (index_def->type == ZCURVE) {
+        if ((part_count != index_def->key_def->part_count) &&
+                (part_count != index_def->key_def->part_count * 2)) {
+            diag_set(ClientError, ER_KEY_PART_COUNT,
+                     index_def->key_def->part_count * 2, part_count);
+            return -1;
+        }
+        if ((part_count == index_def->key_def->part_count) &&
+                key_validate_parts(index_def->key_def, key, part_count, true)) {
+            return -1;
+        } else {
+            // TODO: FIX incorrect part number in error message
+            for (uint32_t part = 0; part < part_count; part++) {
+                if (key_part_validate(index_def->key_def->parts[part / 2].type,
+                        key, part, true))
+                    return -1;
+                mp_next(&key);
+            }
+        }
 	} else {
 		if (part_count > index_def->key_def->part_count) {
 			diag_set(ClientError, ER_KEY_PART_COUNT,
@@ -119,7 +138,7 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
 		}
 
 		/* Partial keys are allowed only for TREE index type. */
-		if ((index_def->type != TREE && index_def->type != ZCURVE) && part_count < index_def->key_def->part_count) {
+		if ((index_def->type != TREE /*&& index_def->type != ZCURVE*/) && part_count < index_def->key_def->part_count) {
 			diag_set(ClientError, ER_PARTIAL_KEY,
 				 index_type_strs[index_def->type],
 				 index_def->key_def->part_count,
