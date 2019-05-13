@@ -150,9 +150,11 @@ struct memtx_engine {
 	uint32_t delayed_free_mode;
 	/** Memory pool for rtree index iterator. */
 	struct mempool rtree_iterator_pool;
+	/** Memory pool for rtree index iterator. */
+	struct mempool zcurve_iterator_pool;
 	/**
-	 * Memory pool for all index iterators except rtree.
-	 * The latter is significantly larger so it has its
+	 * Memory pool for all index iterators except rtree and z-curve.
+	 * They are significantly larger so it has its
 	 * own memory pool.
 	 */
 	struct mempool iterator_pool;

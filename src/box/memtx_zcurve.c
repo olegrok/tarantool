@@ -28,6 +28,11 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <small/mempool.h>
+#include <small/small.h>
+#include <salad/bit_array.h>
+
 #include "memtx_zcurve.h"
 #include "memtx_engine.h"
 #include "space.h"
@@ -37,8 +42,6 @@
 #include "fiber.h"
 #include "tuple.h"
 #include <third_party/qsort_arg.h>
-#include <small/mempool.h>
-#include <salad/bit_array.h>
 
 /**
  * Struct that is used as a key in BPS tree definition.
@@ -94,8 +97,6 @@ memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
                          struct key_def *def)
 {
     (void)def;
-    (void)element;
-    (void)key_data;
     assert(element->tuple != NULL);
     assert(element->z_address != NULL);
     assert(key_data->key != NULL);
@@ -509,11 +510,6 @@ struct tree_iterator {
 	struct mempool *pool;
 };
 
-// TODO:
-//static_assert(sizeof(struct tree_iterator) <= MEMTX_ITERATOR_SIZE,
-//	      "sizeof(struct tree_iterator) must be less than or equal "
-//	      "to MEMTX_ITERATOR_SIZE");
-
 static void
 tree_iterator_free(struct iterator *iterator);
 
@@ -562,8 +558,11 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 	tuple_unref(it->current.tuple);
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (res == NULL || (it->key_data.z_address_end != NULL &&
-			bit_array_cmp(res->z_address, it->key_data.z_address_end) > 0)) {
+
+	if (res == NULL || (it->key_data.z_address != NULL &&
+		it->key_data.z_address_end != NULL &&
+		bit_array_cmp(res->z_address, it->key_data.z_address_end) > 0)) {
+
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
 		it->current.z_address = NULL;
@@ -1012,23 +1011,24 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 		key = NULL;
 	}
 
-	struct tree_iterator *it = mempool_alloc(&memtx->iterator_pool);
+	struct tree_iterator *it = mempool_alloc(&memtx->zcurve_iterator_pool);
 	if (it == NULL) {
 		diag_set(OutOfMemory, sizeof(struct tree_iterator),
 			 "memtx_zcurve_index", "iterator");
 		return NULL;
 	}
 	iterator_create(&it->base, base);
-	it->pool = &memtx->iterator_pool;
+	it->pool = &memtx->zcurve_iterator_pool;
 	it->base.next = tree_iterator_start;
 	it->base.free = tree_iterator_free;
 	it->type = type;
     // FIXME: Check that it works
 	it->key_data.key = key;
+	it->key_data.z_address = NULL;
+	it->key_data.z_address_end = NULL;
 	printf("%d %d\n", base->def->key_def->part_count, part_count);
 	if (base->def->key_def->part_count == part_count) {
         it->key_data.z_address = mp_decode_key(key, part_count, index->base.def);
-        it->key_data.z_address_end = NULL;
 	} else if (base->def->key_def->part_count * 2 == part_count) {
         it->key_data.z_address = mp_decode_part(key, part_count, index->base.def, 0);
         it->key_data.z_address_end = mp_decode_part(key, part_count, index->base.def, 1);
@@ -1210,6 +1210,10 @@ static const struct index_vtab memtx_zcurve_index_vtab = {
 struct index *
 memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 {
+	if (!mempool_is_initialized(&memtx->zcurve_iterator_pool)) {
+		mempool_create(&memtx->zcurve_iterator_pool, cord_slab_cache(),
+					   sizeof(struct tree_iterator));
+	}
 	struct memtx_zcurve_index *index =
 		(struct memtx_zcurve_index *)calloc(1, sizeof(*index));
 	if (index == NULL) {
