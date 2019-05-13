@@ -137,6 +137,8 @@ memtx_engine_shutdown(struct engine *engine)
 	mempool_destroy(&memtx->iterator_pool);
 	if (mempool_is_initialized(&memtx->rtree_iterator_pool))
 		mempool_destroy(&memtx->rtree_iterator_pool);
+	if (mempool_is_initialized(&memtx->zcurve_iterator_pool))
+		mempool_destroy(&memtx->zcurve_iterator_pool);
 	mempool_destroy(&memtx->index_extent_pool);
 	slab_cache_destroy(&memtx->index_slab_cache);
 	small_alloc_destroy(&memtx->alloc);
