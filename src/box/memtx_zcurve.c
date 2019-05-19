@@ -224,45 +224,44 @@ is_relevant(BIT_ARRAY* lower_bound, BIT_ARRAY* upper_bound,
 	return result;
 }
 
-size_t bit_position(size_t max_dim, uint32_t dim, uint8_t step) {
-	return max_dim * ((KEY_SIZE_IN_BITS - 1) - step) + dim;
+size_t bit_position(size_t index_dim, uint32_t dim, uint8_t step) {
+	return index_dim * step + dim;
 }
 
-uint32_t get_dimension(uint32_t max_dim, size_t bit_position) {
-	return bit_position % max_dim;
+uint32_t get_dim(uint32_t index_dim, size_t bit_position) {
+	return bit_position % index_dim;
 }
 
-uint8_t get_step(uint32_t max_dim, size_t bit_position) {
-	return KEY_SIZE_IN_BITS - 1 - bit_position / max_dim;
+uint8_t get_step(uint32_t index_dim, size_t bit_position) {
+	return bit_position / index_dim;
 }
 
 BIT_ARRAY* get_next_zvalue(BIT_ARRAY* z_value, BIT_ARRAY* lower_bound,
 		BIT_ARRAY* upper_bound) {
-	const size_t len = bit_array_length(z_value);
-	assert(len == bit_array_length(lower_bound));
-	assert(len == bit_array_length(upper_bound));
-	const uint32_t max_dim = len / KEY_SIZE_IN_BITS;
+	const size_t key_len = bit_array_length(z_value);
+	assert(key_len == bit_array_length(lower_bound));
+	assert(key_len == bit_array_length(upper_bound));
+	const uint32_t index_dim = key_len / KEY_SIZE_IN_BITS;
 
 	BIT_ARRAY* result = bit_array_clone(z_value);
 	bit_array_add_uint64(result, 1);
 
-	int8_t flag[max_dim];
-	uint8_t out_step[max_dim];
-	int32_t save_min[max_dim];
-	int32_t save_max[max_dim];
+	int8_t flag[index_dim], out_step[index_dim];
+	int32_t save_min[index_dim], save_max[index_dim];
 
-	for (uint32_t i = 0; i < max_dim; ++i) {
+	for (uint32_t i = 0; i < index_dim; ++i) {
 		flag[i] = 0;
-		out_step[i] = UINT8_MAX;
+		out_step[i] = INT8_MIN;
 		save_min[i] = -1;
 		save_max[i] = -1;
 	}
 
-	size_t bp = len;
+	size_t bp = key_len;
 	do {
 		bp--;
-		uint32_t dim = get_dimension(max_dim, bp);
-		uint8_t step = get_step(max_dim, bp);
+		uint32_t dim = get_dim(index_dim, bp);
+		uint8_t step = get_step(index_dim, bp);
+
 		if (bit_array_get_bit(result, bp) > bit_array_get_bit(lower_bound, bp)) {
 			if (save_min[dim] == -1) {
 				save_min[dim] = step;
@@ -284,10 +283,11 @@ BIT_ARRAY* get_next_zvalue(BIT_ARRAY* z_value, BIT_ARRAY* lower_bound,
 				flag[dim] = 1;
 			}
 		}
-	} while(bp != 0);
+	} while (bp > 0);
 
+	// Next intersection point
 	bool is_nip = true;
-	for (uint32_t dim = 0; dim < max_dim; ++dim) {
+	for (uint32_t dim = 0; dim < index_dim; ++dim) {
 		if (flag[dim] != 0) {
 			is_nip = false;
 		}
@@ -296,48 +296,42 @@ BIT_ARRAY* get_next_zvalue(BIT_ARRAY* z_value, BIT_ARRAY* lower_bound,
 		return result;
 	}
 
-	uint32_t min_dim = max_dim;
-	uint8_t min_out_step = UINT8_MAX;
+	uint32_t max_dim = 0;
+	int8_t max_out_step = -1;
 
-	for (uint32_t i = 0; i < max_dim; ++i) {
-		if (min_out_step > out_step[i]) {
-			min_out_step = out_step[i];
-			min_dim = i;
+	uint32_t i = index_dim;
+	do {
+		i--;
+		if (max_out_step < out_step[i]) {
+			max_out_step = out_step[i];
+			max_dim = i;
 		}
-	}
+	} while (i != 0);
 
-	printf("flag %d %d\n", flag[1], flag[0]);
-	printf("out_step %d %d\n", out_step[1], out_step[0]);
-	printf("save_min %d %d\n", save_min[1], save_min[0]);
-	printf("save_max %d %d\n", save_max[1], save_max[0]);
-	printf("min out_step dim %d %d\n", min_out_step, min_dim);
-
-	size_t max_bp = bit_position(max_dim, min_dim, min_out_step);
-	if (flag[min_dim] == 1) {
-		for (size_t new_bp = max_bp + 1; new_bp < len; ++new_bp) {
-			if (get_step(max_dim, new_bp) > save_max[get_dimension(max_dim, new_bp)] &&
+	size_t max_bp = bit_position(index_dim, max_dim, max_out_step);
+	if (flag[max_dim] == 1) {
+		for (size_t new_bp = max_bp + 1; new_bp < key_len; ++new_bp) {
+			if (get_step(index_dim, new_bp) <= save_max[get_dim(index_dim, new_bp)] &&
 				bit_array_get_bit(result, new_bp) == 0) {
 				max_bp = new_bp;
 				break;
 			}
 		}
 		// some attributes have to be updated for further processing
-		uint32_t max_bp_dim = get_dimension(max_dim, max_bp);
-		save_min[max_bp_dim] = get_step(max_dim, max_bp);
+		uint32_t max_bp_dim = get_dim(index_dim, max_bp);
+		save_min[max_bp_dim] = get_step(index_dim, max_bp);
 		flag[max_bp_dim] = 0;
 	}
-	printf("max_bp %lu\n", max_bp);
 
-	for (uint32_t dim = 0; dim < max_dim; ++dim) {
+	for (uint32_t dim = 0; dim < index_dim; ++dim) {
 		if (flag[dim] >= 0) {
 			// nip has not fallen below the minimum in dim
-			if (max_bp <= bit_position(max_dim, dim, save_min[dim])) {
+			if (max_bp <= bit_position(index_dim, dim, save_min[dim])) {
 				// set all bits in dimension dim with
 				// bit position < max_bp to 0 because nip would not surely get below
 				// the lower_bound
-				for (size_t i = 0; i < KEY_SIZE_IN_BITS; ++i) {
-//					size_t bit_pos = bit_position(max_dim, dim, i);
-					size_t bit_pos = max_dim * i + dim;
+				for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
+						bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
 						break;
 					}
@@ -347,8 +341,8 @@ BIT_ARRAY* get_next_zvalue(BIT_ARRAY* z_value, BIT_ARRAY* lower_bound,
 				// set all bits in dimension dim with
 				// bit position < max_bp to the value of corresponding bits of the
 				// lower_bound
-				for (size_t i = 0; i < KEY_SIZE_IN_BITS; ++i) {
-					size_t bit_pos = max_dim * i + dim;
+				for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
+					 	bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
 						break;
 					}
@@ -361,14 +355,15 @@ BIT_ARRAY* get_next_zvalue(BIT_ARRAY* z_value, BIT_ARRAY* lower_bound,
 			// set all bits in dimension dim to the value of
 			// corresponding bits of the lower_bound because the minimum would not
 			// be exceeded otherwise
-			for (size_t i = 0; i < KEY_SIZE_IN_BITS; ++i) {
-				size_t bit_pos = max_dim * i + dim;
+			for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
+				 	bit_pos += index_dim) {
 				bit_array_assign_bit(result, bit_pos,
 									 bit_array_get_bit(lower_bound, bit_pos));
 			}
 		}
 	}
 
+	bit_array_set_bit(result, max_bp);
 	return result;
 }
 
@@ -582,7 +577,6 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 				bit_array_print(next_zvalue, stdout);
 			}
 		}
-
 	}
 	return 0;
 }
