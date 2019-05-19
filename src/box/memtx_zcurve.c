@@ -487,7 +487,8 @@ mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index
 static BIT_ARRAY*
 extract_zaddress(struct tuple *tuple, const struct index_def *index_def) {
     uint32_t  key_size;
-    const char* key = tuple_extract_key(tuple, index_def->key_def, &key_size);
+    const char* key = tuple_extract_key(tuple, index_def->key_def,
+    		MULTIKEY_NONE, &key_size);
     mp_decode_array(&key);
     return mp_decode_key(key, index_def->key_def->part_count, index_def);
 }
