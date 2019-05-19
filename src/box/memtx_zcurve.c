@@ -97,9 +97,8 @@ memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
                          struct key_def *def)
 {
     (void)def;
-    assert(element->tuple != NULL);
-    assert(element->z_address != NULL);
-    assert(key_data->key != NULL);
+    assert(element->tuple != NULL && element->z_address != NULL);
+//    assert(key_data->key != NULL);
     return bit_array_cmp(element->z_address, key_data->z_address);
 }
 
@@ -502,6 +501,10 @@ struct tree_iterator {
 	enum iterator_type type;
 	struct memtx_zcurve_key_data key_data;
 	struct memtx_zcurve_data current;
+
+	BIT_ARRAY* lower_bound;
+	BIT_ARRAY* upper_bound;
+
 	/** Memory pool the iterator was allocated from. */
 	struct mempool *pool;
 };
@@ -521,6 +524,12 @@ tree_iterator_free(struct iterator *iterator)
 {
 	struct tree_iterator *it = tree_iterator(iterator);
 	struct tuple *tuple = it->current.tuple;
+	if (it->lower_bound != NULL) {
+		bit_array_free(it->lower_bound);
+	}
+	if (it->upper_bound != NULL) {
+		bit_array_free(it->upper_bound);
+	}
 	if (tuple != NULL)
 		tuple_unref(tuple);
 	mempool_free(it->pool, it);
@@ -538,10 +547,10 @@ tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 static int
 tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 {
-//    printf("tree_iterator_next\n");
+    printf("tree_iterator_next\n");
 	struct tree_iterator *it = tree_iterator(iterator);
-	assert(it->current.tuple != NULL);
-    assert(it->current.z_address != NULL);
+	assert(it->current.tuple != NULL && it->current.z_address != NULL);
+
 	struct memtx_zcurve_data *check =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
@@ -555,26 +564,38 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 
-	if (res == NULL || (it->key_data.z_address != NULL &&
-		it->key_data.z_address_end != NULL &&
-		bit_array_cmp(res->z_address, it->key_data.z_address_end) > 0)) {
+	if (res == NULL || (it->lower_bound != NULL &&
+		it->upper_bound != NULL &&
+		bit_array_cmp(res->z_address, it->upper_bound) > 0)) {
 
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
+		// TODO: free memory?
 		it->current.z_address = NULL;
 		*ret = NULL;
 	} else {
 		*ret = res->tuple;
 		tuple_ref(*ret);
 		it->current = *res;
-		if (it->key_data.z_address_end != NULL) {
-			if (is_relevant(it->key_data.z_address, it->key_data.z_address_end,
+		if (it->upper_bound != NULL) {
+			if (is_relevant(it->lower_bound, it->upper_bound,
 					it->current.z_address)) {
 				printf("is_relevant %s\n", tuple_str(it->current.tuple));
 			} else {
 				printf("is not relevant %s\n", tuple_str(it->current.tuple));
 				BIT_ARRAY* next_zvalue = get_next_zvalue(it->current.z_address,
-						it->key_data.z_address, it->key_data.z_address_end);
+						it->lower_bound, it->upper_bound);
+				struct memtx_zcurve_key_data next_value = {
+						.z_address = next_zvalue,
+						.part_count = it->key_data.part_count,
+				};
+				it->tree_iterator = memtx_zcurve_lower_bound(it->tree, &next_value, NULL);
+				res = memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+				if (res != NULL) {
+					*ret = res->tuple;
+					tuple_ref(*ret);
+					it->current = *res;
+				}
 				bit_array_print(next_zvalue, stdout);
 			}
 		}
@@ -733,7 +754,6 @@ tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 	assert(it->current.tuple == NULL);
 	assert(it->current.z_address == NULL);
 	if (it->key_data.key == 0) {
-	    printf("it->key_data.key == 0\n");
 		if (iterator_type_is_reverse(it->type))
 			it->tree_iterator = memtx_zcurve_iterator_last(tree);
 		else
@@ -744,6 +764,7 @@ tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 			it->tree_iterator =
 				memtx_zcurve_lower_bound(tree, &it->key_data,
 						       &exact);
+			// TODO: add search of first relevant value
 			if (type == ITER_EQ && !exact)
 				return 0;
 		} else { // ITER_GT, ITER_REQ, ITER_LE
@@ -1021,12 +1042,22 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->key_data.key = key;
 	it->key_data.z_address = NULL;
 	it->key_data.z_address_end = NULL;
+	it->lower_bound = NULL;
+	it->upper_bound = NULL;
 	printf("%d %d\n", base->def->key_def->part_count, part_count);
 	if (base->def->key_def->part_count == part_count) {
+		// TODO: remove key_data
         it->key_data.z_address = mp_decode_key(key, part_count, index->base.def);
+		it->lower_bound = mp_decode_key(key, part_count, index->base.def);
+		it->upper_bound = ones(part_count);
 	} else if (base->def->key_def->part_count * 2 == part_count) {
-        it->key_data.z_address = mp_decode_part(key, part_count, index->base.def, 0);
-        it->key_data.z_address_end = mp_decode_part(key, part_count, index->base.def, 1);
+		it->lower_bound = mp_decode_part(key, part_count, index->base.def, 0);
+		it->upper_bound = mp_decode_part(key, part_count, index->base.def, 1);
+		it->key_data.z_address = mp_decode_part(key, part_count, index->base.def, 0);
+		// TODO: remove key_data
+		it->key_data.z_address_end = mp_decode_part(key, part_count, index->base.def, 1);
+	} else {
+		// error?
 	}
 
 	it->key_data.part_count = part_count;
