@@ -69,6 +69,8 @@ add_executable(xrow.test xrow.cc)
 target_link_libraries(xrow.test xrow unit)
 add_executable(decimal.test decimal.c)
 target_link_libraries(decimal.test core unit)
+add_executable(zcurve.test zcurve.cc)
+target_link_libraries(zcurve.test salad unit)
 
 add_executable(fiber.test fiber.cc)
 set_source_files_properties(fiber.cc PROPERTIES COMPILE_FLAGS -O0)
