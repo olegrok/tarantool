@@ -150,52 +150,6 @@ memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 	return bit_array_cmp(data_a->z_address, data_b->z_address);
 }
 
-// Provided a minimum Z-address, a maximum Z-address, and a test Z-address,
-// the isRelevant function tells us whether the test address falls within
-// the query rectangle created by the minimum and maximum Z-addresses.
-bool
-is_relevant(z_address* lower_bound, z_address* upper_bound,
-			z_address* test) {
-    size_t len = bit_array_length(lower_bound);
-    assert(len == bit_array_length(upper_bound));
-    assert(len == bit_array_length(test));
-
-    uint32_t dim = len / KEY_SIZE_IN_BITS;
-	// TODO: move grid to key_def
-	z_address* grid[dim];
-	for (uint32_t i = 0; i < dim; ++i) {
-		grid[i] = bit_array_create(len);
-		for (int j = 0; j < 64; ++j) {
-			bit_array_set_bit(grid[i], dim * j);
-		}
-		bit_array_shift_left(grid[i], i, 0);
-	}
-
-	z_address *low, *high, *test_grid;
-	low = bit_array_create(len);
-	high = bit_array_create(len);
-	test_grid = bit_array_create(len);
-	bool result = true;
-
-	for (uint32_t i = 0; i < dim; ++i) {
-		bit_array_and(low, grid[i], lower_bound);
-		bit_array_and(test_grid, grid[i], test);
-		bit_array_and(high, grid[i], upper_bound);
-		if (bit_array_cmp(low, test_grid) > 0 || bit_array_cmp(test_grid, high) > 0) {
-			result = false;
-			break;
-		}
-	}
-
-	bit_array_free(low);
-	bit_array_free(high);
-	bit_array_free(test_grid);
-	for (uint32_t i = 0; i < dim; ++i) {
-		bit_array_free(grid[i]);
-	}
-	return result;
-}
-
 static z_address*
 interleave_keys(z_address** const keys, size_t size) {
 	z_address* result = bit_array_create(size * KEY_SIZE_IN_BITS);
@@ -472,7 +426,6 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 		memtx_zcurve_iterator_next(it->tree, &it->tree_iterator);
 	}
 	tuple_unref(it->current.tuple);
-	bit_array_free(it->current.z_address);
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	/* Use user key def to save a few loops. */
