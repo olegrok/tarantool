@@ -52,7 +52,7 @@ static void next_jump_in_check_2d() {
 		z_address *expected = create_key2d_from_number(test_cases[i].expected);
 		bool in_query_box;
 		z_address *result = get_next_zvalue(value, z_lower_bound,
-				z_upper_bound, false, &in_query_box);
+				z_upper_bound, &in_query_box);
 		is(bit_array_cmp(result, expected), 0, "%" PRIu64 " -> %" PRIu64,
 				test_cases[i].test_point, test_cases[i].expected);
 		bool test_case_in_qb = test_cases[i].test_point == test_cases[i].expected;
