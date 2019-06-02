@@ -15,7 +15,9 @@ extern "C" {
 z_address* zeros(uint32_t part_count);
 z_address* ones(uint32_t part_count);
 z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
-						   const z_address* upper_bound, bool inc, bool *in_query_box);
+						   const z_address* upper_bound, bool *in_query_box);
+bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
+						 const z_address* upper_bound);
 
 #if defined(__cplusplus)
 } /* extern "C" { */

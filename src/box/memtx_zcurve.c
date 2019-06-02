@@ -32,6 +32,7 @@
 #include <small/mempool.h>
 #include <small/small.h>
 #include <salad/bit_array.h>
+#include <salad/zcurve.h>
 
 #include "memtx_zcurve.h"
 #include "memtx_engine.h"
@@ -44,16 +45,11 @@
 #include <third_party/qsort_arg.h>
 
 /**
- * Struct that is used as a key in BPS tree definition.
- */
-typedef BIT_ARRAY* memtx_zcurve_key_data;
-
-/**
  * Struct that is used as a elem in BPS tree definition.
  */
 struct memtx_zcurve_data {
     /** Z-address. Read here: https://en.wikipedia.org/wiki/Z-order_curve */
-    BIT_ARRAY *z_address;
+	z_address *z_address;
 	/* Tuple that this node is represents. */
 	struct tuple *tuple;
 };
@@ -85,7 +81,7 @@ memtx_zcurve_data_identical(const struct memtx_zcurve_data *a,
  */
 static inline int
 memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
-                         memtx_zcurve_key_data key_data,
+						 z_address* key_data,
                          struct key_def *def)
 {
     (void)def;
@@ -109,7 +105,7 @@ memtx_zcurve_elem_compare(const struct memtx_zcurve_data *elem_a,
 #define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b, arg)
 #define BPS_TREE_IDENTICAL(a, b) memtx_zcurve_data_identical(&a, &b)
 #define bps_tree_elem_t struct memtx_zcurve_data
-#define bps_tree_key_t memtx_zcurve_key_data
+#define bps_tree_key_t z_address *
 #define bps_tree_arg_t struct key_def *
 
 #include "salad/bps_tree.h"
@@ -154,33 +150,19 @@ memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 	return bit_array_cmp(data_a->z_address, data_b->z_address);
 }
 
-static BIT_ARRAY*
-zeros(uint32_t part_count) {
-    BIT_ARRAY* result = bit_array_create(part_count * KEY_SIZE_IN_BITS);
-    bit_array_clear_all(result);
-    return result;
-}
-
-static BIT_ARRAY*
-ones(uint32_t part_count) {
-    BIT_ARRAY* result = bit_array_create(part_count * KEY_SIZE_IN_BITS);
-    bit_array_set_all(result);
-    return result;
-}
-
 // Provided a minimum Z-address, a maximum Z-address, and a test Z-address,
 // the isRelevant function tells us whether the test address falls within
 // the query rectangle created by the minimum and maximum Z-addresses.
-static bool
-is_relevant(BIT_ARRAY* lower_bound, BIT_ARRAY* upper_bound,
-		BIT_ARRAY* test) {
+bool
+is_relevant(z_address* lower_bound, z_address* upper_bound,
+			z_address* test) {
     size_t len = bit_array_length(lower_bound);
     assert(len == bit_array_length(upper_bound));
     assert(len == bit_array_length(test));
 
     uint32_t dim = len / KEY_SIZE_IN_BITS;
 	// TODO: move grid to key_def
-    BIT_ARRAY* grid[dim];
+	z_address* grid[dim];
 	for (uint32_t i = 0; i < dim; ++i) {
 		grid[i] = bit_array_create(len);
 		for (int j = 0; j < 64; ++j) {
@@ -189,7 +171,7 @@ is_relevant(BIT_ARRAY* lower_bound, BIT_ARRAY* upper_bound,
 		bit_array_shift_left(grid[i], i, 0);
 	}
 
-	BIT_ARRAY *low, *high, *test_grid;
+	z_address *low, *high, *test_grid;
 	low = bit_array_create(len);
 	high = bit_array_create(len);
 	test_grid = bit_array_create(len);
@@ -214,154 +196,9 @@ is_relevant(BIT_ARRAY* lower_bound, BIT_ARRAY* upper_bound,
 	return result;
 }
 
-size_t bit_position(size_t index_dim, uint32_t dim, uint8_t step) {
-	return index_dim * step + dim;
-}
-
-uint32_t get_dim(uint32_t index_dim, size_t bit_position) {
-	return bit_position % index_dim;
-}
-
-uint8_t get_step(uint32_t index_dim, size_t bit_position) {
-	return bit_position / index_dim;
-}
-
-BIT_ARRAY* get_next_zvalue(BIT_ARRAY* z_value, BIT_ARRAY* lower_bound,
-		BIT_ARRAY* upper_bound, bool inc) {
-	const size_t key_len = bit_array_length(z_value);
-	assert(key_len == bit_array_length(lower_bound));
-	assert(key_len == bit_array_length(upper_bound));
-	const uint32_t index_dim = key_len / KEY_SIZE_IN_BITS;
-
-	BIT_ARRAY* result = bit_array_clone(z_value);
-	if (inc) {
-		bit_array_add_uint64(result, 1);
-	}
-
-	int8_t flag[index_dim], out_step[index_dim];
-	int32_t save_min[index_dim], save_max[index_dim];
-
-	for (uint32_t i = 0; i < index_dim; ++i) {
-		flag[i] = 0;
-		out_step[i] = INT8_MIN;
-		save_min[i] = -1;
-		save_max[i] = -1;
-	}
-
-	size_t bp = key_len;
-	do {
-		bp--;
-		uint32_t dim = get_dim(index_dim, bp);
-		uint8_t step = get_step(index_dim, bp);
-
-		if (bit_array_get_bit(result, bp) > bit_array_get_bit(lower_bound, bp)) {
-			if (save_min[dim] == -1) {
-				save_min[dim] = step;
-			}
-		} else if (bit_array_get_bit(result, bp) < bit_array_get_bit(lower_bound, bp)) {
-			if (flag[dim] == 0 && save_min[dim] == -1) {
-				out_step[dim] = step;
-				flag[dim] = -1;
-			}
-		}
-
-		if (bit_array_get_bit(result, bp) < bit_array_get_bit(upper_bound, bp)) {
-			if (save_max[dim] == -1) {
-				save_max[dim] = step;
-			}
-		} else if (bit_array_get_bit(result, bp) > bit_array_get_bit(upper_bound, bp)) {
-			if (flag[dim] == 0 && save_max[dim] == -1) {
-				out_step[dim] = step;
-				flag[dim] = 1;
-			}
-		}
-	} while (bp > 0);
-
-	// Next intersection point
-	bool is_nip = true;
-	for (uint32_t dim = 0; dim < index_dim; ++dim) {
-		if (flag[dim] != 0) {
-			is_nip = false;
-		}
-	}
-	if (is_nip) {
-		return result;
-	}
-
-	uint32_t max_dim = 0;
-	int8_t max_out_step = -1;
-
-	uint32_t i = index_dim;
-	do {
-		i--;
-		if (max_out_step < out_step[i]) {
-			max_out_step = out_step[i];
-			max_dim = i;
-		}
-	} while (i != 0);
-
-	size_t max_bp = bit_position(index_dim, max_dim, max_out_step);
-	if (flag[max_dim] == 1) {
-		for (size_t new_bp = max_bp + 1; new_bp < key_len; ++new_bp) {
-			if (get_step(index_dim, new_bp) <= save_max[get_dim(index_dim, new_bp)] &&
-				bit_array_get_bit(result, new_bp) == 0) {
-				max_bp = new_bp;
-				break;
-			}
-		}
-		// some attributes have to be updated for further processing
-		uint32_t max_bp_dim = get_dim(index_dim, max_bp);
-		save_min[max_bp_dim] = get_step(index_dim, max_bp);
-		flag[max_bp_dim] = 0;
-	}
-
-	for (uint32_t dim = 0; dim < index_dim; ++dim) {
-		if (flag[dim] >= 0) {
-			// nip has not fallen below the minimum in dim
-			if (max_bp <= bit_position(index_dim, dim, save_min[dim])) {
-				// set all bits in dimension dim with
-				// bit position < max_bp to 0 because nip would not surely get below
-				// the lower_bound
-				for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
-						bit_pos += index_dim) {
-					if (bit_pos >= max_bp) {
-						break;
-					}
-					bit_array_clear_bit(result, bit_pos);
-				}
-			} else {
-				// set all bits in dimension dim with
-				// bit position < max_bp to the value of corresponding bits of the
-				// lower_bound
-				for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
-					 	bit_pos += index_dim) {
-					if (bit_pos >= max_bp) {
-						break;
-					}
-					bit_array_assign_bit(result, bit_pos,
-										 bit_array_get_bit(lower_bound, bit_pos));
-				}
-			}
-		} else {
-			// nip has fallen below the minimum in dim
-			// set all bits in dimension dim to the value of
-			// corresponding bits of the lower_bound because the minimum would not
-			// be exceeded otherwise
-			for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
-				 	bit_pos += index_dim) {
-				bit_array_assign_bit(result, bit_pos,
-									 bit_array_get_bit(lower_bound, bit_pos));
-			}
-		}
-	}
-
-	bit_array_set_bit(result, max_bp);
-	return result;
-}
-
-static BIT_ARRAY*
-interleave_keys(BIT_ARRAY** const keys, size_t size) {
-    BIT_ARRAY* result = bit_array_create(size * KEY_SIZE_IN_BITS);
+static z_address*
+interleave_keys(z_address** const keys, size_t size) {
+	z_address* result = bit_array_create(size * KEY_SIZE_IN_BITS);
     for (size_t i = 0; i < size; i++) {
         for (size_t j = 0; j < KEY_SIZE_IN_BITS; j++) {
             if (bit_array_get_bit(keys[i], j) == 1) {
@@ -372,10 +209,10 @@ interleave_keys(BIT_ARRAY** const keys, size_t size) {
     return result;
 }
 
-static BIT_ARRAY*
+static z_address*
 mp_decode_part(const char *mp, uint32_t part_count,
                const struct index_def *index_def, uint32_t even) {
-    BIT_ARRAY* key_parts[part_count / 2];
+	z_address* key_parts[part_count / 2];
     for (uint32_t j = 0; j < part_count; ++j) {
         uint32_t i = j / 2;
         if (j % 2 != even) {
@@ -422,7 +259,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
             }
         }
     }
-    BIT_ARRAY* result = interleave_keys(key_parts, part_count / 2);
+	z_address* result = interleave_keys(key_parts, part_count / 2);
     for (uint32_t i = 0; i < part_count / 2; ++i) {
         bit_array_free(key_parts[i]);
     }
@@ -430,9 +267,9 @@ mp_decode_part(const char *mp, uint32_t part_count,
     return result;
 }
 
-static BIT_ARRAY*
+static z_address*
 mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index_def) {
-    BIT_ARRAY* key_parts[part_count];
+	z_address* key_parts[part_count];
     for (uint32_t i = 0; i < part_count; ++i) {
         switch (index_def->key_def->parts->type) {
             case FIELD_TYPE_UNSIGNED: {
@@ -467,7 +304,7 @@ mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index
         }
         bit_array_print(key_parts[i], stdout);
     }
-    BIT_ARRAY* result = interleave_keys(key_parts, part_count);
+	z_address* result = interleave_keys(key_parts, part_count);
     for (uint32_t i = 0; i < part_count; ++i) {
         bit_array_free(key_parts[i]);
     }
@@ -476,7 +313,7 @@ mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index
 }
 
 // Extract z-address from tuple
-static BIT_ARRAY*
+static z_address*
 extract_zaddress(struct tuple *tuple, const struct index_def *index_def) {
     uint32_t  key_size;
     const char* key = tuple_extract_key(tuple, index_def->key_def,
@@ -494,8 +331,8 @@ struct tree_iterator {
 	enum iterator_type type;
 	struct memtx_zcurve_data current;
 
-	BIT_ARRAY* lower_bound;
-	BIT_ARRAY* upper_bound;
+	z_address* lower_bound;
+	z_address* upper_bound;
 
 	/** Memory pool the iterator was allocated from. */
 	struct mempool *pool;
@@ -518,9 +355,11 @@ tree_iterator_free(struct iterator *iterator)
 	struct tuple *tuple = it->current.tuple;
 	if (it->lower_bound != NULL) {
 		bit_array_free(it->lower_bound);
+		it->lower_bound = NULL;
 	}
 	if (it->upper_bound != NULL) {
 		bit_array_free(it->upper_bound);
+		it->upper_bound = NULL;
 	}
 	if (tuple != NULL) {
 		tuple_unref(tuple);
@@ -537,55 +376,55 @@ tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 	return 0;
 }
 
+static void
+tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
+	struct tree_iterator *it = tree_iterator(iterator);
+	struct memtx_zcurve_data *res =
+			memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+
+	bool is_relevant = false;
+	while (!is_relevant) {
+		if (res == NULL || bit_array_cmp(res->z_address, it->upper_bound) > 0) {
+			iterator->next = tree_iterator_dummie;
+			it->current.tuple = NULL;
+			*ret = NULL;
+			return;
+		}
+
+		if (z_value_is_relevant(res->z_address, it->lower_bound, it->upper_bound)) {
+			break;
+		}
+
+		z_address *next_zvalue = get_next_zvalue(res->z_address,
+												 it->lower_bound, it->upper_bound,
+												 NULL);
+		it->tree_iterator = memtx_zcurve_lower_bound(it->tree, next_zvalue,
+													 &is_relevant);
+		res = memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+		bit_array_free(next_zvalue);
+	}
+	*ret = res->tuple;
+	tuple_ref(*ret);
+	it->current = *res;
+}
+
 static int
 tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 {
-    printf("tree_iterator_next\n");
+	printf("tree_iterator_next\n");
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
-
 	struct memtx_zcurve_data *check =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+			memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
 		it->tree_iterator =
-			memtx_zcurve_upper_bound_elem(it->tree, it->current,
-						    NULL);
+				memtx_zcurve_upper_bound_elem(it->tree, it->current,
+											NULL);
 	} else {
 		memtx_zcurve_iterator_next(it->tree, &it->tree_iterator);
 	}
 	tuple_unref(it->current.tuple);
-	struct memtx_zcurve_data *res =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-
-	if (res == NULL ||
-			bit_array_cmp(res->z_address, it->upper_bound) > 0) {
-		iterator->next = tree_iterator_dummie;
-		it->current.tuple = NULL;
-//		bit_array_free(it->current.z_address);
-		it->current.z_address = NULL;
-		*ret = NULL;
-	} else {
-		*ret = res->tuple;
-		tuple_ref(*ret);
-		it->current = *res;
-
-		if (is_relevant(it->lower_bound, it->upper_bound,
-				it->current.z_address)) {
-			printf("is_relevant %s\n", tuple_str(it->current.tuple));
-		} else {
-			printf("is not relevant %s\n", tuple_str(it->current.tuple));
-			BIT_ARRAY* next_zvalue = get_next_zvalue(it->current.z_address,
-					it->lower_bound, it->upper_bound, false);
-			it->tree_iterator = memtx_zcurve_lower_bound(it->tree, next_zvalue, NULL);
-			res = memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-			if (res != NULL) {
-				*ret = res->tuple;
-				tuple_ref(*ret);
-				it->current = *res;
-			}
-			bit_array_print(next_zvalue, stdout);
-		}
-	}
+	tree_iterator_scroll(iterator, ret);
 	return 0;
 }
 
@@ -758,37 +597,11 @@ tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 		memtx_zcurve_iterator_prev(it->tree, &it->tree_iterator);
 	}
 
-	struct memtx_zcurve_data *res =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (!res || bit_array_cmp(res->z_address, it->upper_bound) > 0)
-		return 0;
-	// TODO: check is_relevant. Find first relevant element
-	it->current = *res;
-
-	BIT_ARRAY* next_zvalue = get_next_zvalue(it->current.z_address,
-											 it->lower_bound, it->upper_bound, false);
-	while (bit_array_cmp(next_zvalue, it->current.z_address) != 0) {
-		it->tree_iterator = memtx_zcurve_lower_bound(it->tree, next_zvalue, NULL);
-
-		res = memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-
-		if (!res || bit_array_cmp(res->z_address, it->upper_bound) > 0) {
-			// TODO: check
-			it->current.tuple = NULL;
-			it->current.z_address = NULL;
-			return 0;
-		}
-
-		bit_array_free(it->current.z_address);
-		bit_array_free(next_zvalue);
-		it->current = *res;
-		next_zvalue = get_next_zvalue(it->current.z_address,
-									  it->lower_bound, it->upper_bound, false);
+	tree_iterator_scroll(iterator, ret);
+	if (*ret != NULL) {
+		tree_iterator_set_next_method(it);
 	}
-	bit_array_free(next_zvalue);
-	*ret = res->tuple;
-	tuple_ref(*ret);
-	tree_iterator_set_next_method(it);
+
 	return 0;
 }
 
@@ -934,7 +747,7 @@ memtx_zcurve_index_get(struct index *base, const char *key,
 	assert(base->def->opts.is_unique &&
 	       part_count == base->def->key_def->part_count);
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	memtx_zcurve_key_data key_data = mp_decode_key(key, part_count, index->base.def);
+	z_address* key_data = mp_decode_key(key, part_count, index->base.def);
 	struct memtx_zcurve_data *res = memtx_zcurve_find(&index->tree, key_data);
 	*result = res != NULL ? res->tuple : NULL;
 	bit_array_free(key_data);
