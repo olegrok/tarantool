@@ -695,7 +695,21 @@ memtx_space_check_index_def(struct space *space, struct index_def *index_def)
 		/* no furter checks of parts needed */
 		return 0;
 	case ZCURVE:
-		/* ZCURVE index has no limitations. */
+		if (index_def->key_def->parts[0].type != FIELD_TYPE_UNSIGNED &&
+			index_def->key_def->parts[0].type != FIELD_TYPE_STRING &&
+			index_def->key_def->parts[0].type != FIELD_TYPE_INTEGER &&
+			index_def->key_def->parts[0].type != FIELD_TYPE_NUMBER) {
+			diag_set(ClientError, ER_MODIFY_INDEX,
+					 index_def->name, space_name(space),
+					 "ZCURVE index field type must be NUM or STR");
+			return -1;
+		}
+		if (key_def_is_multikey(index_def->key_def)) {
+			diag_set(ClientError, ER_MODIFY_INDEX,
+					 index_def->name, space_name(space),
+					 "ZCURVE index cannot be multikey");
+			return -1;
+		}
 		break;
 	default:
 		diag_set(ClientError, ER_INDEX_TYPE,
