@@ -176,9 +176,9 @@ mp_decode_part(const char *mp, uint32_t part_count,
         }
         if (mp_typeof(*mp) == MP_NIL) {
             if (j % 2 == 0) {
-                key_parts[i] = zeros(1);
+                key_parts[i] = bit_array_create_word64(0);
             } else {
-                key_parts[i] = ones(1);
+                key_parts[i] = bit_array_create_word64(-1ULL);
             }
 			mp_next(&mp);
         } else {
@@ -614,7 +614,6 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 			 struct tuple **result)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	//struct key_def *cmp_def = memtx_zcurve_cmp_def(&index->tree);
 	if (new_tuple) {
 		struct memtx_zcurve_data new_data;
 		new_data.tuple = new_tuple;
@@ -636,6 +635,7 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 						     dup_data.tuple, mode);
 		if (errcode) {
 			memtx_zcurve_delete(&index->tree, new_data);
+//			bit_array_free(new_data.z_address);
 			if (dup_data.tuple != NULL)
 				memtx_zcurve_insert(&index->tree, dup_data, NULL);
 			struct space *sp = space_cache_find(base->def->space_id);
@@ -654,6 +654,7 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 		old_data.tuple = old_tuple;
 		old_data.z_address = extract_zaddress(old_tuple, index->base.def);
 		memtx_zcurve_delete(&index->tree, old_data);
+//		bit_array_free(old_data.z_address);
 	}
 	*result = old_tuple;
 	return 0;
@@ -754,7 +755,6 @@ static int
 memtx_zcurve_index_build_next(struct index *base, struct tuple *tuple)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-//	struct key_def *cmp_def = memtx_zcurve_cmp_def(&index->tree);
 	if (index->build_array == NULL) {
 		index->build_array = malloc(MEMTX_EXTENT_SIZE);
 		if (index->build_array == NULL) {
@@ -908,8 +908,8 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	}
 
 	/* See comment to memtx_zcurve_index_update_def(). */
-	struct key_def *cmp_def;
-	cmp_def = def->opts.is_unique && !def->key_def->is_nullable ?
+	struct key_def *cmp_def = def->opts.is_unique &&
+			!def->key_def->is_nullable ?
 			index->base.def->key_def : index->base.def->cmp_def;
 
 	memtx_zcurve_create(&index->tree, cmp_def, memtx_index_extent_alloc,
