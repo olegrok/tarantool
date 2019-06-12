@@ -62,6 +62,34 @@ space = nil
 pk = nil
 
 -------------------------------------------------------------------------------
+-- single-part (string)
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('string', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'string'}, unique = true})
+
+-- Z-order curve uses only first 8 bytes of string as key
+space:insert{'123456789'}
+space:insert{'12345678'}
+pk:select{'12345678'}
+pk:delete{'123456780'}
+
+-- Check order
+space:replace{'aaa'}
+space:replace{'bbb'}
+space:replace{'bbba'}
+space:replace{'c'}
+space:replace{'dddd'}
+space:replace{'deee'}
+space:replace{'eeed'}
+space:select()
+space:select{'b', 'd'}
+
+space:drop()
+space = nil
+pk = nil
+
+-------------------------------------------------------------------------------
 -- single-part (unsigned) range query
 -------------------------------------------------------------------------------
 

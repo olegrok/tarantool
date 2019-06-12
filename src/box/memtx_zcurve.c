@@ -42,7 +42,6 @@
 #include "memory.h"
 #include "fiber.h"
 #include "tuple.h"
-#include <third_party/qsort_arg.h>
 
 /**
  * Struct that is used as a elem in BPS tree definition.
@@ -81,28 +80,24 @@ memtx_zcurve_data_identical(const struct memtx_zcurve_data *a,
  */
 static inline int
 memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
-						 z_address* key_data,
-                         struct key_def *def)
+						 z_address* key_data)
 {
-    (void)def;
     assert(element->tuple != NULL && element->z_address != NULL);
     return bit_array_cmp(element->z_address, key_data);
 }
 
 static inline int
 memtx_zcurve_elem_compare(const struct memtx_zcurve_data *elem_a,
-                          const struct memtx_zcurve_data *elem_b,
-                          struct key_def *key_def)
+                          const struct memtx_zcurve_data *elem_b)
 {
-    (void)key_def;
     return bit_array_cmp(elem_a->z_address, elem_b->z_address);
 }
 
 #define BPS_TREE_NAME memtx_zcurve
 #define BPS_TREE_BLOCK_SIZE (512)
 #define BPS_TREE_EXTENT_SIZE MEMTX_EXTENT_SIZE
-#define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b, arg)
-#define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b, arg)
+#define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b)
+#define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b)
 #define BPS_TREE_IDENTICAL(a, b) memtx_zcurve_data_identical(&a, &b)
 #define bps_tree_elem_t struct memtx_zcurve_data
 #define bps_tree_key_t z_address *
@@ -131,20 +126,13 @@ struct memtx_zcurve_index {
 
 /* {{{ Utilities. *************************************************/
 
-static inline struct key_def *
-memtx_zcurve_cmp_def(struct memtx_zcurve *tree)
-{
-	return tree->arg;
-}
-
 #define KEY_SIZE_IN_BITS (64lu)
 
 static int
-memtx_zcurve_qcompare(const void* a, const void *b, void *c)
+memtx_zcurve_qcompare(const void* a, const void *b)
 {
 	const struct memtx_zcurve_data *data_a = a;
 	const struct memtx_zcurve_data *data_b = b;
-	(void)c;
 	assert(data_a != NULL && data_a->z_address != NULL);
 	assert(data_b != NULL && data_b->z_address != NULL);
 	return bit_array_cmp(data_a->z_address, data_b->z_address);
@@ -161,6 +149,19 @@ interleave_keys(z_address** const keys, size_t size) {
         }
     }
     return result;
+}
+
+static uint64_t
+str_to_key_part(const char *src, size_t len)
+{
+	uint64_t result = 0;
+	const size_t n = sizeof(result);
+	char *dest = (void*)&result;
+
+	for (size_t i = 0; i < n && i < len; i++)
+		dest[n - i - 1] = src[i];
+
+	return result;
 }
 
 static z_address*
@@ -202,11 +203,10 @@ mp_decode_part(const char *mp, uint32_t part_count,
                     break;
                 }
                 case FIELD_TYPE_STRING: {
-                    uint32_t value_len = sizeof(uint64_t);
+                    uint32_t value_len = 0;
                     const char* value = mp_decode_str(&mp, &value_len);
-                    // TODO: copy first four bytes
-                    uint64_t* u_value = (void*)(&value);
-                    key_parts[i] = bit_array_create_word64(*u_value);
+                    uint64_t u_value = str_to_key_part(value, value_len);
+                    key_parts[i] = bit_array_create_word64(u_value);
                     break;
                 }
                 default:
@@ -247,11 +247,10 @@ mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index
                 break;
             }
             case FIELD_TYPE_STRING: {
-                uint32_t value_len = sizeof(uint64_t);
+                uint32_t value_len = 0;
                 const char* value = mp_decode_str(&mp, &value_len);
-                // TODO: copy first four bytes
-                uint64_t* u_value = (void*)(&value);
-                key_parts[i] = bit_array_create_word64(*u_value);
+                uint64_t u_value = str_to_key_part(value, value_len);
+                key_parts[i] = bit_array_create_word64(u_value);
                 break;
             }
             default:
@@ -402,8 +401,7 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	// TODO: check that value is relevant and not at the end
 	if (res == NULL ||
 			memtx_zcurve_compare_key(res,
-					  it->current.z_address,
-					  it->index_def->key_def) != 0) {
+					  it->current.z_address) != 0) {
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
 		it->current.z_address = NULL;
@@ -792,9 +790,8 @@ static void
 memtx_zcurve_index_end_build(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	struct key_def *cmp_def = memtx_zcurve_cmp_def(&index->tree);
-	qsort_arg(index->build_array, index->build_array_size,
-		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, cmp_def);
+	qsort(index->build_array, index->build_array_size,
+		  sizeof(index->build_array[0]), memtx_zcurve_qcompare);
 	memtx_zcurve_build(&index->tree, index->build_array,
 			 index->build_array_size);
 
