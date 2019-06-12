@@ -179,6 +179,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
             } else {
                 key_parts[i] = ones(1);
             }
+			mp_next(&mp);
         } else {
             switch (index_def->key_def->parts->type) {
                 case FIELD_TYPE_UNSIGNED: {
@@ -209,7 +210,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
                     break;
                 }
                 default:
-                    assert(false);
+					unreachable();
             }
         }
     }
@@ -254,7 +255,7 @@ mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index
                 break;
             }
             default:
-                assert(false);
+				unreachable();
         }
         bit_array_print(key_parts[i], stdout);
     }
@@ -324,7 +325,6 @@ tree_iterator_free(struct iterator *iterator)
 static int
 tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 {
-    printf("tree_iterator_dummie\n");
 	(void)iterator;
 	*ret = NULL;
 	return 0;
@@ -365,7 +365,6 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 static int
 tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 {
-	printf("tree_iterator_next\n");
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
@@ -379,35 +378,6 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 	}
 	tuple_unref(it->current.tuple);
 	tree_iterator_scroll(iterator, ret);
-	return 0;
-}
-
-static int
-tree_iterator_prev(struct iterator *iterator, struct tuple **ret)
-{
-    printf("tree_iterator_prev\n");
-	struct tree_iterator *it = tree_iterator(iterator);
-	assert(it->current.tuple != NULL && it->current.z_address != NULL);
-	struct memtx_zcurve_data *check =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
-		it->tree_iterator =
-			memtx_zcurve_lower_bound_elem(it->tree, it->current, NULL);
-	}
-	memtx_zcurve_iterator_prev(it->tree, &it->tree_iterator);
-	tuple_unref(it->current.tuple);
-	struct memtx_zcurve_data *res =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (!res) {
-		iterator->next = tree_iterator_dummie;
-		it->current.tuple = NULL;
-		it->current.z_address = NULL;
-		*ret = NULL;
-	} else {
-		*ret = res->tuple;
-		tuple_ref(*ret);
-		it->current = *res;
-	}
 	return 0;
 }
 
@@ -446,65 +416,23 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	return 0;
 }
 
-static int
-tree_iterator_prev_equal(struct iterator *iterator, struct tuple **ret)
-{
-    printf("tree_iterator_prev_equal\n");
-	struct tree_iterator *it = tree_iterator(iterator);
-	assert(it->current.tuple != NULL && it->current.z_address != NULL);
-	struct memtx_zcurve_data *check =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
-		it->tree_iterator =
-			memtx_zcurve_lower_bound_elem(it->tree, it->current, NULL);
-	}
-	memtx_zcurve_iterator_prev(it->tree, &it->tree_iterator);
-	tuple_unref(it->current.tuple);
-	struct memtx_zcurve_data *res =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	/* Use user key def to save a few loops. */
-	if (res == NULL ||
-            memtx_zcurve_compare_key(res,
-					  it->current.z_address,
-					  it->index_def->key_def) != 0) {
-		iterator->next = tree_iterator_dummie;
-		it->current.tuple = NULL;
-		it->current.z_address = NULL;
-		*ret = NULL;
-	} else {
-		*ret = res->tuple;
-		tuple_ref(*ret);
-		it->current = *res;
-	}
-	return 0;
-}
-
 static void
 tree_iterator_set_next_method(struct tree_iterator *it)
 {
     printf("tree_iterator_set_next_method %d\n", it->type);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	switch (it->type) {
-	case ITER_EQ:
-		it->base.next = tree_iterator_next_equal;
-		break;
-	case ITER_REQ:
-		it->base.next = tree_iterator_prev_equal;
-		break;
 	case ITER_ALL:
 		it->base.next = tree_iterator_next;
 		break;
-	case ITER_LT:
-	case ITER_LE:
-		it->base.next = tree_iterator_prev;
+	case ITER_EQ:
+		it->base.next = tree_iterator_next_equal;
 		break;
 	case ITER_GE:
-	case ITER_GT:
 		it->base.next = tree_iterator_next;
 		break;
 	default:
-		/* The type was checked in initIterator */
-		assert(false);
+		unreachable();
 	}
 }
 
@@ -520,35 +448,10 @@ tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 	bool exact = false;
 	assert(it->current.tuple == NULL && it->current.z_address == NULL);
 
-	if (type == ITER_ALL || type == ITER_EQ ||
-	    type == ITER_GE || type == ITER_LT) {
-		it->tree_iterator =
-			memtx_zcurve_lower_bound(tree, it->lower_bound,
-					       &exact);
-		// TODO: add search of first relevant value
-		if (type == ITER_EQ && !exact)
-			return 0;
-	} else { // ITER_GT, ITER_REQ, ITER_LE
-		it->tree_iterator =
-			memtx_zcurve_upper_bound(tree, it->lower_bound,
-					       &exact);
-		if (type == ITER_REQ && !exact)
-			return 0;
-	}
-	if (iterator_type_is_reverse(type)) {
-		/*
-		 * Because of limitations of tree search API we use use
-		 * lower_bound for LT search and upper_bound for LE
-		 * and REQ searches. Thus we found position to the
-		 * right of the target one. Let's make a step to the
-		 * left to reach target position.
-		 * If we found an invalid iterator all the elements in
-		 * the tree are less (less or equal) to the key, and
-		 * iterator_next call will convert the iterator to the
-		 * last position in the tree, that's what we need.
-		 */
-		memtx_zcurve_iterator_prev(it->tree, &it->tree_iterator);
-	}
+	it->tree_iterator =
+		memtx_zcurve_lower_bound(tree, it->lower_bound, &exact);
+	if (type == ITER_EQ && !exact)
+		return 0;
 
 	tree_iterator_scroll(iterator, ret);
 	if (*ret != NULL) {
@@ -762,13 +665,14 @@ static struct iterator *
 memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 				 const char *key, uint32_t part_count)
 {
+	printf("iterator_type %d\n", type);
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	struct memtx_engine *memtx = (struct memtx_engine *)base->engine;
 
 	assert(part_count == 0 || key != NULL);
-	if (type > ITER_GT) {
+	if (type != ITER_EQ && type != ITER_ALL && type != ITER_GE) {
 		diag_set(UnsupportedIndexFeature, base->def,
-			 "requested iterator type");
+				 "requested iterator type");
 		return NULL;
 	}
 
@@ -777,8 +681,15 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 		 * If no key is specified, downgrade equality
 		 * iterators to a full range.
 		 */
-		type = iterator_type_is_reverse(type) ? ITER_LE : ITER_GE;
+		type = ITER_GE;
 		key = NULL;
+	} else if (base->def->key_def->part_count * 2 == part_count
+		&& type != ITER_ALL) {
+		/*
+		 * If part_count is twice greater than key_def.part_count
+		 * set iterator to range query
+		 */
+		type = ITER_GE;
 	}
 
 	struct tree_iterator *it = mempool_alloc(&memtx->zcurve_iterator_pool);
@@ -795,18 +706,17 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
 	printf("%d %d\n", base->def->key_def->part_count, part_count);
-	if (base->def->key_def->part_count == part_count) {
+	if (part_count == 0 || type == ITER_ALL) {
+		it->lower_bound = zeros(base->def->key_def->part_count);
+		it->upper_bound = ones(base->def->key_def->part_count);
+	} else if (base->def->key_def->part_count == part_count) {
 		it->lower_bound = mp_decode_key(key, part_count, index->base.def);
 		it->upper_bound = ones(part_count);
 	} else if (base->def->key_def->part_count * 2 == part_count) {
 		it->lower_bound = mp_decode_part(key, part_count, index->base.def, 0);
 		it->upper_bound = mp_decode_part(key, part_count, index->base.def, 1);
-	} else if (part_count == 0) {
-		it->lower_bound = zeros(base->def->key_def->part_count);
-		it->upper_bound = ones(base->def->key_def->part_count);
 	} else {
-		assert(false);
-		// TODO: error, see R-Tree
+		unreachable();
 	}
 	it->index_def = base->def;
 	it->tree = &index->tree;
