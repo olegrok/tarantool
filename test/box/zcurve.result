@@ -180,6 +180,86 @@ pk = nil
 ---
 ...
 -------------------------------------------------------------------------------
+-- single-part (string)
+-------------------------------------------------------------------------------
+space = box.schema.space.create('string', { engine = 'memtx' })
+---
+...
+pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'string'}, unique = true})
+---
+...
+-- Z-order curve uses only first 8 bytes of string as key
+space:insert{'123456789'}
+---
+- ['123456789']
+...
+space:insert{'12345678'}
+---
+- error: Duplicate key exists in unique index 'primary' in space 'string'
+...
+pk:select{'12345678'}
+---
+- - ['123456789']
+...
+pk:delete{'123456780'}
+---
+- ['123456789']
+...
+-- Check order
+space:replace{'aaa'}
+---
+- ['aaa']
+...
+space:replace{'bbb'}
+---
+- ['bbb']
+...
+space:replace{'bbba'}
+---
+- ['bbba']
+...
+space:replace{'c'}
+---
+- ['c']
+...
+space:replace{'dddd'}
+---
+- ['dddd']
+...
+space:replace{'deee'}
+---
+- ['deee']
+...
+space:replace{'eeed'}
+---
+- ['eeed']
+...
+space:select()
+---
+- - ['aaa']
+  - ['bbb']
+  - ['bbba']
+  - ['c']
+  - ['dddd']
+  - ['deee']
+  - ['eeed']
+...
+space:select{'b', 'd'}
+---
+- - ['bbb']
+  - ['bbba']
+  - ['c']
+...
+space:drop()
+---
+...
+space = nil
+---
+...
+pk = nil
+---
+...
+-------------------------------------------------------------------------------
 -- single-part (unsigned) range query
 -------------------------------------------------------------------------------
 space = box.schema.space.create('uint', { engine = 'memtx' })
