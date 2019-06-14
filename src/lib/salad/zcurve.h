@@ -7,6 +7,8 @@
 #include <salad/bit_array.h>
 
 typedef BIT_ARRAY z_address;
+#define z_value_free bit_array_free
+#define z_value_cmp bit_array_cmp
 
 #if defined(__cplusplus)
 extern "C" {
@@ -24,6 +26,8 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
  */
 bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 						 const z_address* upper_bound);
+
+z_address* interleave_keys(const uint64_t *keys, size_t size);
 
 #if defined(__cplusplus)
 } /* extern "C" { */

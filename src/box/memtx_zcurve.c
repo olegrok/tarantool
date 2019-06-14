@@ -83,14 +83,14 @@ memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
 						 z_address* key_data)
 {
     assert(element->tuple != NULL && element->z_address != NULL);
-    return bit_array_cmp(element->z_address, key_data);
+    return z_value_cmp(element->z_address, key_data);
 }
 
 static inline int
 memtx_zcurve_elem_compare(const struct memtx_zcurve_data *elem_a,
                           const struct memtx_zcurve_data *elem_b)
 {
-    return bit_array_cmp(elem_a->z_address, elem_b->z_address);
+    return z_value_cmp(elem_a->z_address, elem_b->z_address);
 }
 
 #define BPS_TREE_NAME memtx_zcurve
@@ -135,23 +135,7 @@ memtx_zcurve_qcompare(const void* a, const void *b)
 	const struct memtx_zcurve_data *data_b = b;
 	assert(data_a != NULL && data_a->z_address != NULL);
 	assert(data_b != NULL && data_b->z_address != NULL);
-	return bit_array_cmp(data_a->z_address, data_b->z_address);
-}
-
-static z_address*
-interleave_keys(const uint64_t *keys, size_t size) {
-	z_address* result = bit_array_create(size * KEY_SIZE_IN_BITS);
-	bit_array_clear_all(result);
-	uint64_t bit = 1;
-    for (size_t j = 0; j < KEY_SIZE_IN_BITS; j++) {
-        for (size_t i = 0; i < size; i++) {
-            if ((keys[i] & bit) != 0) {
-                bit_array_set_bit(result, size * j + i);
-            }
-        }
-        bit <<= 1ULL;
-    }
-    return result;
+	return z_value_cmp(data_a->z_address, data_b->z_address);
 }
 
 static uint64_t
@@ -174,6 +158,39 @@ toggle_high_bit(uint64_t key_part)
     return key_part;
 }
 
+static uint64_t
+decode_uint(const char **mp) {
+	return mp_decode_uint(mp);
+}
+
+static uint64_t
+decode_int(const char **mp) {
+	uint64_t u_value;
+	if (mp_typeof(**mp) == MP_UINT) {
+		u_value = decode_uint(mp);
+	} else {
+		int64_t value = mp_decode_int(mp);
+		uint64_t *tmp = (void*)(&value);
+		u_value = *tmp;
+
+	}
+	return toggle_high_bit(u_value);
+}
+
+static uint64_t
+decode_number(const char **mp) {
+	double value = mp_decode_double(mp);
+	uint64_t* u_value = (void*)(&value);
+	return toggle_high_bit(*u_value);
+}
+
+static uint64_t
+decode_str(const char **mp) {
+	uint32_t value_len = 0;
+	const char* value = mp_decode_str(mp, &value_len);
+	return str_to_key_part(value, value_len);
+}
+
 static z_address*
 mp_decode_part(const char *mp, uint32_t part_count,
                const struct index_def *index_def, uint32_t even) {
@@ -194,27 +211,19 @@ mp_decode_part(const char *mp, uint32_t part_count,
         } else {
             switch (index_def->key_def->parts->type) {
                 case FIELD_TYPE_UNSIGNED: {
-                    uint64_t value = mp_decode_uint(&mp);
-                    key_parts[i] = value;
+                    key_parts[i] = decode_uint(&mp);
                     break;
                 }
                 case FIELD_TYPE_INTEGER: {
-                    int64_t value = mp_decode_int(&mp);
-                    uint64_t* u_value = (void*)(&value);
-                    key_parts[i] = toggle_high_bit(*u_value);
+                    key_parts[i] = decode_int(&mp);
                     break;
                 }
                 case FIELD_TYPE_NUMBER: {
-                    double value = mp_decode_double(&mp);
-                    uint64_t* u_value = (void*)(&value);
-                    key_parts[i] = toggle_high_bit(*u_value);
+                    key_parts[i] = decode_number(&mp);
                     break;
                 }
                 case FIELD_TYPE_STRING: {
-                    uint32_t value_len = 0;
-                    const char* value = mp_decode_str(&mp, &value_len);
-                    uint64_t u_value = str_to_key_part(value, value_len);
-                    key_parts[i] = u_value;
+                    key_parts[i] = decode_str(&mp);
                     break;
                 }
                 default:
@@ -223,44 +232,36 @@ mp_decode_part(const char *mp, uint32_t part_count,
         }
     }
 	z_address* result = interleave_keys(key_parts, part_count / 2);
-    bit_array_print(result, stdout);
     return result;
 }
 
 static z_address*
-mp_decode_key(const char *mp, uint32_t part_count, const struct index_def *index_def) {
+mp_decode_key(const char *mp, uint32_t part_count,
+		const struct index_def *index_def) {
 	uint64_t key_parts[part_count];
     for (uint32_t i = 0; i < part_count; ++i) {
         switch (index_def->key_def->parts->type) {
-            case FIELD_TYPE_UNSIGNED: {
-                key_parts[i] = mp_decode_uint(&mp);
-                break;
-            }
-            case FIELD_TYPE_INTEGER: {
-                int64_t value = mp_decode_int(&mp);
-                uint64_t* u_value = (void*)(&value);
-                key_parts[i] = toggle_high_bit(*u_value);
-                break;
-            }
-            case FIELD_TYPE_NUMBER: {
-                double value = mp_decode_double(&mp);
-                uint64_t* u_value = (void*)(&value);
-                key_parts[i] = toggle_high_bit(*u_value);
-                break;
-            }
-            case FIELD_TYPE_STRING: {
-                uint32_t value_len = 0;
-                const char* value = mp_decode_str(&mp, &value_len);
-                uint64_t u_value = str_to_key_part(value, value_len);
-                key_parts[i] = u_value;
-                break;
-            }
+			case FIELD_TYPE_UNSIGNED: {
+				key_parts[i] = decode_uint(&mp);
+				break;
+			}
+			case FIELD_TYPE_INTEGER: {
+				key_parts[i] = decode_int(&mp);
+				break;
+			}
+			case FIELD_TYPE_NUMBER: {
+				key_parts[i] = decode_number(&mp);
+				break;
+			}
+			case FIELD_TYPE_STRING: {
+				key_parts[i] = decode_str(&mp);
+				break;
+			}
             default:
 				unreachable();
         }
     }
 	z_address* result = interleave_keys(key_parts, part_count);
-    bit_array_print(result, stdout);
     return result;
 }
 
@@ -306,11 +307,11 @@ tree_iterator_free(struct iterator *iterator)
 	struct tree_iterator *it = tree_iterator(iterator);
 	struct tuple *tuple = it->current.tuple;
 	if (it->lower_bound != NULL) {
-		bit_array_free(it->lower_bound);
+		z_value_free(it->lower_bound);
 		it->lower_bound = NULL;
 	}
 	if (it->upper_bound != NULL) {
-		bit_array_free(it->upper_bound);
+		z_value_free(it->upper_bound);
 		it->upper_bound = NULL;
 	}
 	if (tuple != NULL) {
@@ -335,7 +336,7 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 
 	bool is_relevant = false;
 	while (!is_relevant) {
-		if (res == NULL || bit_array_cmp(res->z_address, it->upper_bound) > 0) {
+		if (res == NULL || z_value_cmp(res->z_address, it->upper_bound) > 0) {
 			iterator->next = tree_iterator_dummie;
 			it->current.tuple = NULL;
 			*ret = NULL;
@@ -347,12 +348,13 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 		}
 
 		z_address *next_zvalue = get_next_zvalue(res->z_address,
-												 it->lower_bound, it->upper_bound,
+												 it->lower_bound,
+												 it->upper_bound,
 												 NULL);
 		it->tree_iterator = memtx_zcurve_lower_bound(it->tree, next_zvalue,
 													 &is_relevant);
 		res = memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-		bit_array_free(next_zvalue);
+		z_value_free(next_zvalue);
 	}
 	*ret = res->tuple;
 	tuple_ref(*ret);
@@ -381,7 +383,6 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 static int
 tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 {
-    printf("tree_iterator_next_equal\n");
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
@@ -415,7 +416,6 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 static void
 tree_iterator_set_next_method(struct tree_iterator *it)
 {
-    printf("tree_iterator_set_next_method %d\n", it->type);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	switch (it->type) {
 	case ITER_ALL:
@@ -435,7 +435,6 @@ tree_iterator_set_next_method(struct tree_iterator *it)
 static int
 tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 {
-    printf("tree_iterator_start\n");
 	*ret = NULL;
 	struct tree_iterator *it = tree_iterator(iterator);
 	it->base.next = tree_iterator_dummie;
@@ -575,7 +574,8 @@ memtx_zcurve_index_bsize(struct index *base)
 }
 
 static int
-memtx_zcurve_index_random(struct index *base, uint32_t rnd, struct tuple **result)
+memtx_zcurve_index_random(struct index *base, uint32_t rnd,
+		struct tuple **result)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	struct memtx_zcurve_data *res = memtx_zcurve_random(&index->tree, rnd);
@@ -602,7 +602,7 @@ memtx_zcurve_index_get(struct index *base, const char *key,
 	z_address* key_data = mp_decode_key(key, part_count, index->base.def);
 	struct memtx_zcurve_data *res = memtx_zcurve_find(&index->tree, key_data);
 	*result = res != NULL ? res->tuple : NULL;
-	bit_array_free(key_data);
+	z_value_free(key_data);
 	return 0;
 }
 
@@ -633,7 +633,7 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 						     dup_data.tuple, mode);
 		if (errcode) {
 			memtx_zcurve_delete(&index->tree, new_data);
-//			bit_array_free(new_data.z_address);
+//			z_value_free(new_data.z_address);
 			if (dup_data.tuple != NULL)
 				memtx_zcurve_insert(&index->tree, dup_data, NULL);
 			struct space *sp = space_cache_find(base->def->space_id);
@@ -652,7 +652,7 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 		old_data.tuple = old_tuple;
 		old_data.z_address = extract_zaddress(old_tuple, index->base.def);
 		memtx_zcurve_delete(&index->tree, old_data);
-//		bit_array_free(old_data.z_address);
+//		z_value_free(old_data.z_address);
 	}
 	*result = old_tuple;
 	return 0;
@@ -662,7 +662,6 @@ static struct iterator *
 memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 				 const char *key, uint32_t part_count)
 {
-	printf("iterator_type %d\n", type);
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	struct memtx_engine *memtx = (struct memtx_engine *)base->engine;
 
@@ -702,7 +701,6 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->type = type;
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
-	printf("%d %d\n", base->def->key_def->part_count, part_count);
 	if (part_count == 0 || type == ITER_ALL) {
 		it->lower_bound = zeros(base->def->key_def->part_count);
 		it->upper_bound = ones(base->def->key_def->part_count);
