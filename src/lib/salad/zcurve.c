@@ -29,8 +29,6 @@ static uint8_t get_step(uint32_t index_dim, size_t bit_position) {
 bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 				 const z_address* upper_bound) {
 	const size_t key_len = bit_array_length(z_value);
-	assert(key_len == bit_array_length(lower_bound));
-	assert(key_len == bit_array_length(upper_bound));
 	const uint32_t index_dim = key_len / KEY_SIZE_IN_BITS;
 
 	int32_t save_min[index_dim], save_max[index_dim];
@@ -41,26 +39,31 @@ bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 	}
 
 	size_t bp = key_len;
+	char z_value_bp, lower_bound_bp, upper_bound_bp;
 	do {
 		bp--;
 		uint32_t dim = get_dim(index_dim, bp);
 		uint8_t step = get_step(index_dim, bp);
 
-		if (bit_array_get_bit(z_value, bp) > bit_array_get_bit(lower_bound, bp)) {
+		z_value_bp = bit_array_get_bit(z_value, bp);
+		lower_bound_bp = bit_array_get_bit(lower_bound, bp);
+		upper_bound_bp = bit_array_get_bit(upper_bound, bp);
+
+		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
 				save_min[dim] = step;
 			}
-		} else if (bit_array_get_bit(z_value, bp) < bit_array_get_bit(lower_bound, bp)) {
+		} else if (z_value_bp < lower_bound_bp) {
 			if (save_min[dim] == -1) {
 				return false;
 			}
 		}
 
-		if (bit_array_get_bit(z_value, bp) < bit_array_get_bit(upper_bound, bp)) {
+		if (z_value_bp < upper_bound_bp) {
 			if (save_max[dim] == -1) {
 				save_max[dim] = step;
 			}
-		} else if (bit_array_get_bit(z_value, bp) > bit_array_get_bit(upper_bound, bp)) {
+		} else if (z_value_bp > upper_bound_bp) {
 			if (save_max[dim] == -1) {
 				return false;
 			}
@@ -72,8 +75,6 @@ bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 						   const z_address* upper_bound, bool *in_query_box) {
 	const size_t key_len = bit_array_length(z_value);
-	assert(key_len == bit_array_length(lower_bound));
-	assert(key_len == bit_array_length(upper_bound));
 	const uint32_t index_dim = key_len / KEY_SIZE_IN_BITS;
 
 	z_address* result = bit_array_clone(z_value);
@@ -89,27 +90,32 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 	}
 
 	size_t bp = key_len;
+	char z_value_bp, lower_bound_bp, upper_bound_bp;
 	do {
 		bp--;
 		uint32_t dim = get_dim(index_dim, bp);
 		uint8_t step = get_step(index_dim, bp);
 
-		if (bit_array_get_bit(result, bp) > bit_array_get_bit(lower_bound, bp)) {
+		z_value_bp = bit_array_get_bit(result, bp);
+		lower_bound_bp = bit_array_get_bit(lower_bound, bp);
+		upper_bound_bp = bit_array_get_bit(upper_bound, bp);
+
+		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
 				save_min[dim] = step;
 			}
-		} else if (bit_array_get_bit(result, bp) < bit_array_get_bit(lower_bound, bp)) {
+		} else if (z_value_bp < lower_bound_bp) {
 			if (flag[dim] == 0 && save_min[dim] == -1) {
 				out_step[dim] = step;
 				flag[dim] = -1;
 			}
 		}
 
-		if (bit_array_get_bit(result, bp) < bit_array_get_bit(upper_bound, bp)) {
+		if (z_value_bp < upper_bound_bp) {
 			if (save_max[dim] == -1) {
 				save_max[dim] = step;
 			}
-		} else if (bit_array_get_bit(result, bp) > bit_array_get_bit(upper_bound, bp)) {
+		} else if (z_value_bp > upper_bound_bp) {
 			if (flag[dim] == 0 && save_max[dim] == -1) {
 				out_step[dim] = step;
 				flag[dim] = 1;
