@@ -159,41 +159,98 @@ toggle_high_bit(uint64_t key_part)
 }
 
 static uint64_t
-decode_uint(const char **mp) {
+decode_uint(const char **mp)
+{
 	return mp_decode_uint(mp);
 }
 
 static uint64_t
-decode_int(const char **mp) {
+decode_number(const char **mp)
+{
 	uint64_t u_value;
-	if (mp_typeof(**mp) == MP_UINT) {
-		u_value = decode_uint(mp);
-	} else {
-		int64_t value = mp_decode_int(mp);
-		uint64_t *tmp = (void*)(&value);
-		u_value = *tmp;
-
+	double value = 0;
+	switch (mp_typeof(**mp)) {
+		case MP_FLOAT: {
+			value = mp_decode_float(mp);
+			break;
+		}
+		case MP_DOUBLE: {
+			value = mp_decode_double(mp);
+			break;
+		}
+		case MP_UINT: {
+			value = mp_decode_uint(mp);
+			break;
+		}
+		case MP_INT: {
+			value = mp_decode_int(mp);
+			break;
+		}
+		default:
+			unreachable();
 	}
+	memcpy(&u_value, &value, sizeof(value));
 	return toggle_high_bit(u_value);
 }
 
 static uint64_t
-decode_number(const char **mp) {
-	double value = mp_decode_double(mp);
-	uint64_t* u_value = (void*)(&value);
-	return toggle_high_bit(*u_value);
+decode_integer(const char **mp)
+{
+	uint64_t u_value;
+	int64_t value = 0;
+	switch (mp_typeof(**mp)) {
+		case MP_UINT: {
+			value = mp_decode_uint(mp);
+			break;
+		}
+		case MP_INT: {
+			value = mp_decode_int(mp);
+			break;
+		}
+		default:
+			unreachable();
+	}
+	memcpy(&u_value, &value, sizeof(value));
+	return toggle_high_bit(u_value);
 }
 
 static uint64_t
-decode_str(const char **mp) {
+decode_str(const char **mp)
+{
 	uint32_t value_len = 0;
 	const char* value = mp_decode_str(mp, &value_len);
 	return str_to_key_part(value, value_len);
 }
 
+static inline void
+mp_decode_to_uint64(const char **mp, enum field_type type, uint64_t *dst)
+{
+	switch (type) {
+		case FIELD_TYPE_UNSIGNED: {
+			*dst = decode_uint(mp);
+			break;
+		}
+		case FIELD_TYPE_INTEGER: {
+			*dst = decode_integer(mp);
+			break;
+		}
+		case FIELD_TYPE_NUMBER: {
+			*dst = decode_number(mp);
+			break;
+		}
+		case FIELD_TYPE_STRING: {
+			*dst = decode_str(mp);
+			break;
+		}
+		default:
+			unreachable();
+	}
+}
+
 static z_address*
 mp_decode_part(const char *mp, uint32_t part_count,
-               const struct index_def *index_def, uint32_t even) {
+               const struct index_def *index_def, uint32_t even)
+{
 	uint64_t key_parts[part_count / 2];
     for (uint32_t j = 0; j < part_count; ++j) {
         uint32_t i = j / 2;
@@ -209,26 +266,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
             }
 			mp_next(&mp);
         } else {
-            switch (index_def->key_def->parts->type) {
-                case FIELD_TYPE_UNSIGNED: {
-                    key_parts[i] = decode_uint(&mp);
-                    break;
-                }
-                case FIELD_TYPE_INTEGER: {
-                    key_parts[i] = decode_int(&mp);
-                    break;
-                }
-                case FIELD_TYPE_NUMBER: {
-                    key_parts[i] = decode_number(&mp);
-                    break;
-                }
-                case FIELD_TYPE_STRING: {
-                    key_parts[i] = decode_str(&mp);
-                    break;
-                }
-                default:
-					unreachable();
-            }
+			mp_decode_to_uint64(&mp, index_def->key_def->parts->type, &key_parts[i]);
         }
     }
 	z_address* result = interleave_keys(key_parts, part_count / 2);
@@ -237,29 +275,11 @@ mp_decode_part(const char *mp, uint32_t part_count,
 
 static z_address*
 mp_decode_key(const char *mp, uint32_t part_count,
-		const struct index_def *index_def) {
+		const struct index_def *index_def)
+{
 	uint64_t key_parts[part_count];
     for (uint32_t i = 0; i < part_count; ++i) {
-        switch (index_def->key_def->parts->type) {
-			case FIELD_TYPE_UNSIGNED: {
-				key_parts[i] = decode_uint(&mp);
-				break;
-			}
-			case FIELD_TYPE_INTEGER: {
-				key_parts[i] = decode_int(&mp);
-				break;
-			}
-			case FIELD_TYPE_NUMBER: {
-				key_parts[i] = decode_number(&mp);
-				break;
-			}
-			case FIELD_TYPE_STRING: {
-				key_parts[i] = decode_str(&mp);
-				break;
-			}
-            default:
-				unreachable();
-        }
+		mp_decode_to_uint64(&mp, index_def->key_def->parts->type, &key_parts[i]);
     }
 	z_address* result = interleave_keys(key_parts, part_count);
     return result;
