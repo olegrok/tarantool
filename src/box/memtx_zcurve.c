@@ -31,7 +31,6 @@
 
 #include <small/mempool.h>
 #include <small/small.h>
-#include <salad/bit_array.h>
 #include <salad/zcurve.h>
 
 #include "memtx_zcurve.h"
@@ -125,8 +124,6 @@ struct memtx_zcurve_index {
 };
 
 /* {{{ Utilities. *************************************************/
-
-#define KEY_SIZE_IN_BITS (64lu)
 
 static int
 memtx_zcurve_qcompare(const void* a, const void *b)
@@ -222,25 +219,21 @@ decode_str(const char **mp)
 	return str_to_key_part(value, value_len);
 }
 
-static inline void
-mp_decode_to_uint64(const char **mp, enum field_type type, uint64_t *dst)
+static inline uint64_t
+mp_decode_to_uint64(const char **mp, enum field_type type)
 {
 	switch (type) {
 		case FIELD_TYPE_UNSIGNED: {
-			*dst = decode_uint(mp);
-			break;
+			return decode_uint(mp);
 		}
 		case FIELD_TYPE_INTEGER: {
-			*dst = decode_integer(mp);
-			break;
+			return decode_integer(mp);
 		}
 		case FIELD_TYPE_NUMBER: {
-			*dst = decode_number(mp);
-			break;
+			return decode_number(mp);
 		}
 		case FIELD_TYPE_STRING: {
-			*dst = decode_str(mp);
-			break;
+			return decode_str(mp);
 		}
 		default:
 			unreachable();
@@ -266,7 +259,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
             }
 			mp_next(&mp);
         } else {
-			mp_decode_to_uint64(&mp, index_def->key_def->parts->type, &key_parts[i]);
+			key_parts[i] = mp_decode_to_uint64(&mp, index_def->key_def->parts->type);
         }
     }
 	z_address* result = interleave_keys(key_parts, part_count / 2);
@@ -279,7 +272,7 @@ mp_decode_key(const char *mp, uint32_t part_count,
 {
 	uint64_t key_parts[part_count];
     for (uint32_t i = 0; i < part_count; ++i) {
-		mp_decode_to_uint64(&mp, index_def->key_def->parts->type, &key_parts[i]);
+		key_parts[i] = mp_decode_to_uint64(&mp, index_def->key_def->parts->type);
     }
 	z_address* result = interleave_keys(key_parts, part_count);
     return result;
@@ -590,7 +583,12 @@ static ssize_t
 memtx_zcurve_index_bsize(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	return memtx_zcurve_mem_used(&index->tree);
+	uint32_t dimension = index->base.def->key_def->part_count;
+	ssize_t tree_size = memtx_zcurve_size(&index->tree);
+	size_t result = memtx_zcurve_mem_used(&index->tree);
+	size_t elem_size = sizeof(z_address) + dimension * sizeof(word_t);
+	result += tree_size * elem_size;
+	return result;
 }
 
 static int
@@ -906,6 +904,15 @@ static const struct index_vtab memtx_zcurve_index_vtab = {
 struct index *
 memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 {
+	if (def->key_def->part_count < 1 ||
+	        def->key_def->part_count > ZCURVE_MAX_DIMENSION) {
+		diag_set(UnsupportedIndexFeature, def,
+				 tt_sprintf("dimension (%lld): must belong to "
+							"range [%u, %u]", def->key_def->part_count,
+							1, ZCURVE_MAX_DIMENSION));
+		return NULL;
+	}
+
 	if (!mempool_is_initialized(&memtx->zcurve_iterator_pool)) {
 		mempool_create(&memtx->zcurve_iterator_pool, cord_slab_cache(),
 					   sizeof(struct tree_iterator));
@@ -927,7 +934,6 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	struct key_def *cmp_def = def->opts.is_unique &&
 			!def->key_def->is_nullable ?
 			index->base.def->key_def : index->base.def->cmp_def;
-
 	memtx_zcurve_create(&index->tree, cmp_def, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);
 	return &index->base;
