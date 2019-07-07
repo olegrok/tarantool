@@ -10,6 +10,11 @@ typedef BIT_ARRAY z_address;
 #define z_value_free bit_array_free
 #define z_value_cmp bit_array_cmp
 
+enum {
+	/** Maximal possible Z-order curve dimension */
+	ZCURVE_MAX_DIMENSION = 20
+};
+
 #if defined(__cplusplus)
 extern "C" {
 #endif /* defined(__cplusplus) */
