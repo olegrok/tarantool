@@ -159,3 +159,38 @@ mk:select({box.NULL, 3, box.NULL, 4})
 space:drop()
 space = nil
 pk = nil
+
+-------------------------------------------------------------------------------
+-- multi-part (float + integer)
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('multi', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {1, 'unsigned'}, unique = true})
+mk = space:create_index('multi', { type = 'zcurve', parts = {2, 'number', 3, 'integer'}})
+
+for i=0,5 do for j=0,5 do space:insert{i * 6 + j, i + 0.01, j} end end
+
+-- returns all tuples
+pk:select{}
+-- returns all tuples in z-order
+mk:select({2, 3, 3, 5}, {iterator = 'ALL'})
+-- (2 <= x <= 3) and (3 <= x <= 5)
+mk:select{2, 3, 3, 5}
+-- (x == 2.01) and (y == 3)
+mk:select{2.01, 3}
+-- (x == 2.01) and (y == 3)
+mk:select({2.01, 3}, {iterator = 'EQ'})
+-- (x >= 2.01) and (y >= 3)
+mk:select({2.01, 3}, {iterator = 'GE'})
+-- (2 <= x <= 3.01)
+mk:select({2, 3.01, box.NULL, box.NULL})
+-- (3 <= y <= 5)
+mk:select({box.NULL, box.NULL, 3, 5})
+-- (x >= 2) and (y >= 3)
+mk:select({2, box.NULL, 3, box.NULL})
+-- (x <= 3) and (y <= 4)
+mk:select({box.NULL, 3, box.NULL, 4})
+
+space:drop()
+space = nil
+pk = nil
