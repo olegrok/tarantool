@@ -32,6 +32,7 @@
 #include <small/mempool.h>
 #include <small/small.h>
 #include <salad/zcurve.h>
+#include <third_party/qsort_arg.h>
 
 #include "memtx_zcurve.h"
 #include "memtx_engine.h"
@@ -97,7 +98,7 @@ memtx_zcurve_elem_compare(const struct memtx_zcurve_data *elem_a,
 #define BPS_TREE_EXTENT_SIZE MEMTX_EXTENT_SIZE
 #define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b)
 #define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b)
-#define BPS_TREE_IDENTICAL(a, b) memtx_zcurve_data_identical(&a, &b)
+#define BPS_TREE_IS_IDENTICAL(a, b) memtx_zcurve_data_identical(&a, &b)
 #define bps_tree_elem_t struct memtx_zcurve_data
 #define bps_tree_key_t z_address *
 #define bps_tree_arg_t struct key_def *
@@ -125,14 +126,21 @@ struct memtx_zcurve_index {
 
 /* {{{ Utilities. *************************************************/
 
+static inline struct key_def *
+memtx_zcurve_cmp_def(struct memtx_zcurve *tree)
+{
+	return tree->arg;
+}
+
 static int
-memtx_zcurve_qcompare(const void* a, const void *b)
+memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 {
 	const struct memtx_zcurve_data *data_a = a;
 	const struct memtx_zcurve_data *data_b = b;
-	assert(data_a != NULL && data_a->z_address != NULL);
-	assert(data_b != NULL && data_b->z_address != NULL);
-	return z_value_cmp(data_a->z_address, data_b->z_address);
+	struct key_def *key_def = c;
+	int result = z_value_cmp(data_a->z_address, data_b->z_address);
+	return result == 0 ? tuple_compare(data_a->tuple, 0, data_b->tuple,
+						 0, key_def) : result;
 }
 
 static uint64_t
@@ -804,8 +812,9 @@ static void
 memtx_zcurve_index_end_build(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	qsort(index->build_array, index->build_array_size,
-		  sizeof(index->build_array[0]), memtx_zcurve_qcompare);
+	struct key_def *cmp_def = memtx_zcurve_cmp_def(&index->tree);
+	qsort_arg(index->build_array, index->build_array_size,
+		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, cmp_def);
 	memtx_zcurve_build(&index->tree, index->build_array,
 			 index->build_array_size);
 
@@ -934,6 +943,7 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	struct key_def *cmp_def = def->opts.is_unique &&
 			!def->key_def->is_nullable ?
 			index->base.def->key_def : index->base.def->cmp_def;
+
 	memtx_zcurve_create(&index->tree, cmp_def, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);
 	return &index->base;

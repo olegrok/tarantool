@@ -118,8 +118,10 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
                      index_def->key_def->part_count * 2, part_count);
             return -1;
         }
+		const char *key_end;
         if ((part_count == index_def->key_def->part_count) &&
-                key_validate_parts(index_def->key_def, key, part_count, true)) {
+                key_validate_parts(index_def->key_def, key, part_count,
+						true, &key_end)) {
             return -1;
         } else {
             // TODO: FIX incorrect part number in error message
