@@ -299,8 +299,6 @@ extract_zaddress(struct tuple *tuple, const struct index_def *index_def) {
 /* {{{ MemtxTree Iterators ****************************************/
 struct tree_iterator {
 	struct iterator base;
-	const struct memtx_zcurve *tree;
-	struct index_def *index_def;
 	struct memtx_zcurve_iterator tree_iterator;
 	enum iterator_type type;
 	struct memtx_zcurve_data current;
@@ -351,9 +349,11 @@ tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 
 static void
 tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
+	struct memtx_zcurve_index *index =
+			(struct memtx_zcurve_index *)iterator->index;
 	struct tree_iterator *it = tree_iterator(iterator);
 	struct memtx_zcurve_data *res =
-			memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+			memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 
 	bool is_relevant = false;
 	while (!is_relevant) {
@@ -372,9 +372,9 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 												 it->lower_bound,
 												 it->upper_bound,
 												 NULL);
-		it->tree_iterator = memtx_zcurve_lower_bound(it->tree, next_zvalue,
+		it->tree_iterator = memtx_zcurve_lower_bound(&index->tree, next_zvalue,
 													 &is_relevant);
-		res = memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+		res = memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 		z_value_free(next_zvalue);
 	}
 	*ret = res->tuple;
@@ -385,16 +385,18 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 static int
 tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 {
+	struct memtx_zcurve_index *index =
+			(struct memtx_zcurve_index *)iterator->index;
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
-			memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+			memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
 		it->tree_iterator =
-				memtx_zcurve_upper_bound_elem(it->tree, it->current,
+				memtx_zcurve_upper_bound_elem(&index->tree, it->current,
 											NULL);
 	} else {
-		memtx_zcurve_iterator_next(it->tree, &it->tree_iterator);
+		memtx_zcurve_iterator_next(&index->tree, &it->tree_iterator);
 	}
 	tuple_unref(it->current.tuple);
 	tree_iterator_scroll(iterator, ret);
@@ -404,19 +406,22 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 static int
 tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 {
+	struct memtx_zcurve_index *index =
+			(struct memtx_zcurve_index *)iterator->index;
 	struct tree_iterator *it = tree_iterator(iterator);
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+		memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
 		it->tree_iterator =
-			memtx_zcurve_upper_bound_elem(it->tree, it->current, NULL);
+			memtx_zcurve_upper_bound_elem(&index->tree,
+					it->current, NULL);
 	} else {
-		memtx_zcurve_iterator_next(it->tree, &it->tree_iterator);
+		memtx_zcurve_iterator_next(&index->tree, &it->tree_iterator);
 	}
 	tuple_unref(it->current.tuple);
 	struct memtx_zcurve_data *res =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
+		memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 	/* Use user key def to save a few loops. */
 	// TODO: check that value is relevant and not at the end
 	if (res == NULL ||
@@ -457,9 +462,11 @@ static int
 tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 {
 	*ret = NULL;
+	struct memtx_zcurve_index *index =
+			(struct memtx_zcurve_index *)iterator->index;
 	struct tree_iterator *it = tree_iterator(iterator);
 	it->base.next = tree_iterator_dummie;
-	const struct memtx_zcurve *tree = it->tree;
+	const struct memtx_zcurve *tree = &index->tree;
 	enum iterator_type type = it->type;
 	bool exact = false;
 	assert(it->current.tuple == NULL && it->current.z_address == NULL);
@@ -739,8 +746,6 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	} else {
 		unreachable();
 	}
-	it->index_def = base->def;
-	it->tree = &index->tree;
 	it->tree_iterator = memtx_zcurve_invalid_iterator();
 	it->current.tuple = NULL;
 	it->current.z_address = NULL;
@@ -826,7 +831,7 @@ memtx_zcurve_index_end_build(struct index *base)
 
 struct tree_snapshot_iterator {
 	struct snapshot_iterator base;
-	struct memtx_zcurve *tree;
+	struct memtx_zcurve_index *index;
 	struct memtx_zcurve_iterator tree_iterator;
 };
 
@@ -836,23 +841,30 @@ tree_snapshot_iterator_free(struct snapshot_iterator *iterator)
 	assert(iterator->free == tree_snapshot_iterator_free);
 	struct tree_snapshot_iterator *it =
 		(struct tree_snapshot_iterator *)iterator;
-	struct memtx_zcurve *tree = (struct memtx_zcurve *)it->tree;
-	memtx_zcurve_iterator_destroy(tree, &it->tree_iterator);
+	memtx_leave_delayed_free_mode((struct memtx_engine *)
+			it->index->base.engine);
+	memtx_zcurve_iterator_destroy(&it->index->tree, &it->tree_iterator);
+	index_unref(&it->index->base);
 	free(iterator);
 }
 
-static const char *
-tree_snapshot_iterator_next(struct snapshot_iterator *iterator, uint32_t *size)
+static int
+tree_snapshot_iterator_next(struct snapshot_iterator *iterator,
+							const char **data, uint32_t *size)
 {
 	assert(iterator->free == tree_snapshot_iterator_free);
 	struct tree_snapshot_iterator *it =
 		(struct tree_snapshot_iterator *)iterator;
+	struct memtx_zcurve *tree = &it->index->tree;
 	struct memtx_zcurve_data *res =
-		memtx_zcurve_iterator_get_elem(it->tree, &it->tree_iterator);
-	if (res == NULL)
-		return NULL;
-	memtx_zcurve_iterator_next(it->tree, &it->tree_iterator);
-	return tuple_data_range(res->tuple, size);
+		memtx_zcurve_iterator_get_elem(tree, &it->tree_iterator);
+	if (res == NULL) {
+		*data = NULL;
+		return 0;
+	}
+	memtx_zcurve_iterator_next(tree, &it->tree_iterator);
+	*data = tuple_data_range(res->tuple, size);
+	return 0;
 }
 
 /**
@@ -874,9 +886,11 @@ memtx_zcurve_index_create_snapshot_iterator(struct index *base)
 
 	it->base.free = tree_snapshot_iterator_free;
 	it->base.next = tree_snapshot_iterator_next;
-	it->tree = &index->tree;
+	it->index = index;
+	index_ref(base);
 	it->tree_iterator = memtx_zcurve_iterator_first(&index->tree);
 	memtx_zcurve_iterator_freeze(&index->tree, &it->tree_iterator);
+	memtx_enter_delayed_free_mode((struct memtx_engine *)base->engine);
 	return (struct snapshot_iterator *) it;
 }
 
