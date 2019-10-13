@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <salad/bit_array.h>
 
-typedef BIT_ARRAY z_address;
+typedef bit_array z_address;
 #define z_value_free bit_array_free
 #define z_value_cmp bit_array_cmp
 
@@ -19,10 +19,22 @@ enum {
 extern "C" {
 #endif /* defined(__cplusplus) */
 
+<<<<<<< HEAD
 z_address* zeros(uint32_t part_count);
 z_address* ones(uint32_t part_count);
 z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 						   const z_address* upper_bound, bool *in_query_box);
+=======
+z_address*
+zeros(uint32_t part_count);
+
+z_address*
+ones(uint32_t part_count);
+
+z_address*
+get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
+		const z_address* upper_bound, bool *in_query_box);
+>>>>>>> Update bit_array implementation
 
 /*
  * Provided a minimum Z-address, a maximum Z-address, and a test Z-address,
