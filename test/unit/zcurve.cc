@@ -2,11 +2,10 @@
 #include "salad/zcurve.h"
 #include "salad/bit_array.h"
 
-const size_t key_size_in_bits = 64lu;
-
 static z_address*
-create_key2d_from_number(uint64_t num) {
-	z_address *key = bit_array_create(2 * key_size_in_bits);
+create_key2d_from_number(uint64_t num)
+{
+	z_address *key = bit_array_create(2);
 	bit_array_clear_all(key);
 	bit_array_add_uint64(key, num);
 	return key;
