@@ -3,7 +3,7 @@
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('uint', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'unsigned'}, unique = true})
+pk = space:create_index('primary', { type = 'zcurve', parts = {{1, 'unsigned'}}, unique = true})
 
 space:replace{0, 0}
 space:replace{9, 9}
@@ -28,7 +28,7 @@ pk = nil
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('uint', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'unsigned'}, unique = true})
+pk = space:create_index('primary', { type = 'zcurve', parts = {{1, 'unsigned'}}, unique = true})
 
 for i=1,9 do space:replace{i} end
 
@@ -66,7 +66,7 @@ pk = nil
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('string', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'string'}, unique = true})
+pk = space:create_index('primary', { type = 'zcurve', parts = {{1, 'string'}}, unique = true})
 
 -- Z-order curve uses only first 8 bytes of string as key
 space:insert{'123456789'}
@@ -94,7 +94,7 @@ pk = nil
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('uint', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'unsigned'}, unique = true})
+pk = space:create_index('primary', { type = 'zcurve', parts = {{1, 'unsigned'}}, unique = true})
 
 for i=1,9 do space:replace{i} end
 
@@ -111,7 +111,7 @@ pk = nil
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('multi', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'zcurve', parts = {1, 'unsigned', 2, 'unsigned'}, unique = true})
+pk = space:create_index('primary', { type = 'zcurve', parts = {{1, 'unsigned'}, {2, 'unsigned'}}, unique = true})
 
 space:replace{2, 4}
 space:replace{2, 5}
@@ -130,8 +130,8 @@ pk = nil
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('multi', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'tree', parts = {1, 'unsigned'}, unique = true})
-mk = space:create_index('multi', { type = 'zcurve', parts = {2, 'unsigned', 3, 'unsigned'}})
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+mk = space:create_index('multi', { type = 'zcurve', parts = {{2, 'unsigned'}, {3, 'unsigned'}}})
 
 for i=0,5 do for j=0,5 do space:insert{i * 6 + j, i, j} end end
 
@@ -165,8 +165,8 @@ pk = nil
 -------------------------------------------------------------------------------
 
 space = box.schema.space.create('multi', { engine = 'memtx' })
-pk = space:create_index('primary', { type = 'tree', parts = {1, 'unsigned'}, unique = true})
-mk = space:create_index('multi', { type = 'zcurve', parts = {2, 'number', 3, 'integer'}})
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+mk = space:create_index('multi', { type = 'zcurve', parts = {{2, 'number'}, {3, 'integer'}}})
 
 for i=0,5 do for j=0,5 do space:insert{i * 6 + j, i + 0.01, j} end end
 
@@ -190,6 +190,45 @@ mk:select({box.NULL, box.NULL, 3, 5})
 mk:select({2, box.NULL, 3, box.NULL})
 -- (x <= 3) and (y <= 4)
 mk:select({box.NULL, 3, box.NULL, 4})
+
+space:drop()
+space = nil
+pk = nil
+
+-------------------------------------------------------------------------------
+-- multi-part non-unique (float + integer)
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('multi', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+mk = space:create_index('multi', { type = 'zcurve', parts = {{2, 'number'}, {3, 'integer'}}, unique = false})
+
+space:insert{1, 2, 3}
+space:insert{2, 2, 3}
+space:insert{3, 2, 3}
+space:insert{4, 3, 4}
+space:insert{5, 3, 4}
+space:insert{6, 3, 4}
+space:insert{7, 3, 5}
+space:insert{8, 3, 5}
+space:insert{9, 3, 5}
+
+-- returns all tuples
+pk:select{}
+
+-- returns tuples in range
+mk:select{3, 3, 4, 4}
+
+space:drop()
+space = nil
+pk = nil
+
+-------------------------------------------------------------------------------
+-- nullable fields is prohibited
+-------------------------------------------------------------------------------
+space = box.schema.space.create('multi', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+mk = space:create_index('multi', { type = 'zcurve', parts = {{2, 'unsigned', is_nullable = true}}, unique = false})
 
 space:drop()
 space = nil

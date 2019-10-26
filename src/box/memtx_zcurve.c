@@ -34,7 +34,6 @@
 #include <salad/zcurve.h>
 #include <third_party/qsort_arg.h>
 
-#include "memtx_zcurve.h"
 #include "memtx_engine.h"
 #include "space.h"
 #include "schema.h" /* space_cache_find() */
@@ -51,6 +50,14 @@ struct memtx_zcurve_data {
 	z_address *z_address;
 	/* Tuple that this node is represents. */
 	struct tuple *tuple;
+};
+
+/**
+ * Struct passed as third argument to compare function
+ */
+struct memtx_zcurve_tree_arg {
+	struct key_def *key_def;
+	bool is_unique;
 };
 
 /**
@@ -87,21 +94,28 @@ memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
 }
 
 static inline int
-memtx_zcurve_elem_compare(const struct memtx_zcurve_data *elem_a,
-                          const struct memtx_zcurve_data *elem_b)
+memtx_zcurve_elem_compare(const void *a, const void *b, void *c)
 {
-    return z_value_cmp(elem_a->z_address, elem_b->z_address);
+	const struct memtx_zcurve_data *elem_a = a;
+	const struct memtx_zcurve_data *elem_b = b;
+	struct memtx_zcurve_tree_arg *arg = c;
+	int result = z_value_cmp(elem_a->z_address, elem_b->z_address);
+	if (arg->is_unique) {
+		return result;
+	}
+	return result == 0 ? tuple_compare(elem_a->tuple, 0, elem_b->tuple,
+									   0, arg->key_def) : result;
 }
 
 #define BPS_TREE_NAME memtx_zcurve
 #define BPS_TREE_BLOCK_SIZE (512)
 #define BPS_TREE_EXTENT_SIZE MEMTX_EXTENT_SIZE
-#define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b)
+#define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b, arg)
 #define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b)
 #define BPS_TREE_IS_IDENTICAL(a, b) memtx_zcurve_data_identical(&a, &b)
 #define bps_tree_elem_t struct memtx_zcurve_data
 #define bps_tree_key_t z_address *
-#define bps_tree_arg_t struct key_def *
+#define bps_tree_arg_t struct memtx_zcurve_tree_arg *
 
 #include "salad/bps_tree.h"
 
@@ -122,12 +136,13 @@ struct memtx_zcurve_index {
 	size_t build_array_size, build_array_alloc_size;
 	struct memtx_gc_task gc_task;
 	struct memtx_zcurve_iterator gc_iterator;
+	struct memtx_zcurve_tree_arg tree_arg;
 };
 
 /* {{{ Utilities. *************************************************/
 
-static inline struct key_def *
-memtx_zcurve_cmp_def(struct memtx_zcurve *tree)
+static inline struct memtx_zcurve_tree_arg *
+memtx_zcurve_cmp_arg(struct memtx_zcurve *tree)
 {
 	return tree->arg;
 }
@@ -135,12 +150,7 @@ memtx_zcurve_cmp_def(struct memtx_zcurve *tree)
 static int
 memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 {
-	const struct memtx_zcurve_data *data_a = a;
-	const struct memtx_zcurve_data *data_b = b;
-	struct key_def *key_def = c;
-	int result = z_value_cmp(data_a->z_address, data_b->z_address);
-	return result == 0 ? tuple_compare(data_a->tuple, 0, data_b->tuple,
-						 0, key_def) : result;
+	return memtx_zcurve_elem_compare(a, b, c);
 }
 
 static uint64_t
@@ -570,13 +580,18 @@ memtx_zcurve_index_update_def(struct index *base)
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	struct index_def *def = base->def;
 	/*
-	 * We use extended key def for non-unique and nullable
-	 * indexes. Unique but nullable index can store multiple
-	 * NULLs. To correctly compare these NULLs extended key
-	 * def must be used. For details @sa tuple_compare.cc.
+	 * We use extended key def for non-unique indexes.
 	 */
-	index->tree.arg = def->opts.is_unique && !def->key_def->is_nullable ?
+	index->tree.arg->key_def = def->opts.is_unique ?
 						def->key_def : def->cmp_def;
+	/*
+	 * We can compare only string prefixes.
+	 * Therefore if index is unique we can compare tuples without
+	 * calling tuple_compare.
+	 * E.g. {'abcdefgh'} and {'abcdefghf'} are equal tuples in terms of prefixes
+	 * But tuple_compare says that it's two different tuples
+	 */
+	index->tree.arg->is_unique = def->opts.is_unique;
 }
 
 static bool
@@ -584,7 +599,7 @@ memtx_zcurve_index_depends_on_pk(struct index *base)
 {
 	struct index_def *def = base->def;
 	/* See comment to memtx_zcurve_index_update_def(). */
-	return !def->opts.is_unique || def->key_def->is_nullable;
+	return !def->opts.is_unique;
 }
 
 static ssize_t
@@ -817,9 +832,9 @@ static void
 memtx_zcurve_index_end_build(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	struct key_def *cmp_def = memtx_zcurve_cmp_def(&index->tree);
+	struct memtx_zcurve_tree_arg *cmp_arg = memtx_zcurve_cmp_arg(&index->tree);
 	qsort_arg(index->build_array, index->build_array_size,
-		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, cmp_def);
+		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, cmp_arg);
 	memtx_zcurve_build(&index->tree, index->build_array,
 			 index->build_array_size);
 
@@ -954,11 +969,11 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	}
 
 	/* See comment to memtx_zcurve_index_update_def(). */
-	struct key_def *cmp_def = def->opts.is_unique &&
-			!def->key_def->is_nullable ?
-			index->base.def->key_def : index->base.def->cmp_def;
+	index->tree_arg.key_def = def->opts.is_unique ?
+				  index->base.def->key_def : index->base.def->cmp_def;
+	index->tree_arg.is_unique = def->opts.is_unique;
 
-	memtx_zcurve_create(&index->tree, cmp_def, memtx_index_extent_alloc,
+	memtx_zcurve_create(&index->tree, &index->tree_arg, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);
 	return &index->base;
 }
