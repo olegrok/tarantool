@@ -19,12 +19,6 @@ enum {
 extern "C" {
 #endif /* defined(__cplusplus) */
 
-<<<<<<< HEAD
-z_address* zeros(uint32_t part_count);
-z_address* ones(uint32_t part_count);
-z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
-						   const z_address* upper_bound, bool *in_query_box);
-=======
 z_address*
 zeros(uint32_t part_count);
 
@@ -34,7 +28,6 @@ ones(uint32_t part_count);
 z_address*
 get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 		const z_address* upper_bound, bool *in_query_box);
->>>>>>> Update bit_array implementation
 
 /*
  * Provided a minimum Z-address, a maximum Z-address, and a test Z-address,

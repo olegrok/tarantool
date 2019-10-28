@@ -463,18 +463,16 @@ key_def_find_pk_in_cmp_def(const struct key_def *cmp_def,
 			   struct region *region);
 
 /**
- * Extract primary key from extended secondary key
- * @param cmp_def   Extended secondary key definition
- *                  (must include primary key parts).
- * @param key_def   Secondary key definition.
+ * Cut first cut_count parts of key_def
+ * @param key_def   Key definition.
+ * @param cut_count Amount of fields to cut.
  * @param region    Region used for temporary allocations.
  * @retval not NULL Pointer to the extracted key definition.
  * @retval NULL     Memory allocation error.
  */
 struct key_def *
-key_def_extract_pk_from_cmp_def(const struct key_def *cmp_def,
-								const struct key_def *key_def,
-								struct region *region);
+key_def_cut_first(const struct key_def *key_def, uint32_t cut_count,
+				  struct region *region);
 
 /*
  * Check that parts of the key match with the key definition.

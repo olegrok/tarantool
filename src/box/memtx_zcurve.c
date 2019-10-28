@@ -940,8 +940,8 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	}
 
 	/* See comment to memtx_zcurve_index_update_def(). */
-	struct key_def *pk_def = key_def_extract_pk_from_cmp_def(index->base.def->cmp_def,
-			index->base.def->key_def, &fiber()->gc);
+	struct key_def *pk_def = key_def_cut_first(index->base.def->cmp_def,
+			index->base.def->key_def->part_count, &fiber()->gc);
 	index->pk_def = pk_def;
 	memtx_zcurve_create(&index->tree, index->pk_def, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);
