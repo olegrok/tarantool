@@ -884,26 +884,25 @@ out:
 }
 
 struct key_def *
-key_def_extract_pk_from_cmp_def(const struct key_def *cmp_def,
-		const struct key_def *key_def,
-		struct region *region)
+key_def_cut_first(const struct key_def *key_def, uint32_t cut_count,
+				  struct region *region)
 {
-	if (cmp_def->part_count == key_def->part_count) {
-		return key_def_dup(cmp_def);
+	if (key_def->part_count == cut_count) {
+		return key_def_dup(key_def);
 	}
 
 	struct key_def *extracted_def = NULL;
 	size_t region_svp = region_used(region);
 
-	uint32_t part_count = cmp_def->part_count - key_def->part_count;
-	struct key_part_def *parts = region_alloc(region, part_count * sizeof(*parts));
+	uint32_t part_count = key_def->part_count - cut_count;
+	struct key_part_def *parts = region_alloc(region,
+			part_count * sizeof(*parts));
 	if (parts == NULL) {
 		diag_set(OutOfMemory, part_count * sizeof(*parts),
 				 "region", "key def parts");
 		goto out;
 	}
-	if (key_def_dump_parts_from(cmp_def, parts, region,
-			key_def->part_count) != 0)
+	if (key_def_dump_parts_from(key_def, parts, region, cut_count) != 0)
 		goto out;
 
 	/* Finally, allocate the new key definition. */
