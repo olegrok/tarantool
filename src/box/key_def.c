@@ -312,13 +312,14 @@ error:
 	return NULL;
 }
 
-int
-key_def_dump_parts(const struct key_def *def, struct key_part_def *parts,
-		   struct region *region)
+static int
+key_def_dump_parts_from(const struct key_def *def, struct key_part_def *parts,
+		struct region *region, uint32_t from)
 {
-	for (uint32_t i = 0; i < def->part_count; i++) {
+	assert(from < def->part_count);
+	for (uint32_t i = from; i < def->part_count; i++) {
 		const struct key_part *part = &def->parts[i];
-		struct key_part_def *part_def = &parts[i];
+		struct key_part_def *part_def = &parts[i - from];
 		part_def->fieldno = part->fieldno;
 		part_def->type = part->type;
 		part_def->is_nullable = key_part_is_nullable(part);
@@ -328,7 +329,7 @@ key_def_dump_parts(const struct key_def *def, struct key_part_def *parts,
 			char *path = region_alloc(region, part->path_len + 1);
 			if (path == NULL) {
 				diag_set(OutOfMemory, part->path_len + 1,
-					 "region", "part_def->path");
+						 "region", "part_def->path");
 				return -1;
 			}
 			memcpy(path, part->path, part->path_len);
@@ -339,6 +340,13 @@ key_def_dump_parts(const struct key_def *def, struct key_part_def *parts,
 		}
 	}
 	return 0;
+}
+
+int
+key_def_dump_parts(const struct key_def *def, struct key_part_def *parts,
+		   struct region *region)
+{
+	return key_def_dump_parts_from(def, parts, region, 0);
 }
 
 box_key_def_t *
@@ -871,6 +879,36 @@ key_def_find_pk_in_cmp_def(const struct key_def *cmp_def,
 	/* Finally, allocate the new key definition. */
 	extracted_def = key_def_new(parts, pk_def->part_count, false);
 out:
+	region_truncate(region, region_svp);
+	return extracted_def;
+}
+
+struct key_def *
+key_def_extract_pk_from_cmp_def(const struct key_def *cmp_def,
+		const struct key_def *key_def,
+		struct region *region)
+{
+	if (cmp_def->part_count == key_def->part_count) {
+		return key_def_dup(cmp_def);
+	}
+
+	struct key_def *extracted_def = NULL;
+	size_t region_svp = region_used(region);
+
+	uint32_t part_count = cmp_def->part_count - key_def->part_count;
+	struct key_part_def *parts = region_alloc(region, part_count * sizeof(*parts));
+	if (parts == NULL) {
+		diag_set(OutOfMemory, part_count * sizeof(*parts),
+				 "region", "key def parts");
+		goto out;
+	}
+	if (key_def_dump_parts_from(cmp_def, parts, region,
+			key_def->part_count) != 0)
+		goto out;
+
+	/* Finally, allocate the new key definition. */
+	extracted_def = key_def_new(parts, part_count, false);
+	out:
 	region_truncate(region, region_svp);
 	return extracted_def;
 }
