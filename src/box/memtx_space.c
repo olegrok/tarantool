@@ -695,6 +695,18 @@ memtx_space_check_index_def(struct space *space, struct index_def *index_def)
 		/* no furter checks of parts needed */
 		return 0;
 	case ZCURVE:
+		if (index_def->opts.is_unique) {
+			diag_set(ClientError, ER_MODIFY_INDEX,
+					 index_def->name, space_name(space),
+					 "ZCURVE can not be unique");
+			return -1;
+		}
+		if (index_def->key_def->is_multikey) {
+			diag_set(ClientError, ER_MODIFY_INDEX,
+					 index_def->name, space_name(space),
+					 "ZCURVE index cannot be multikey");
+			return -1;
+		}
 		if (index_def->key_def->parts[0].type != FIELD_TYPE_UNSIGNED &&
 			index_def->key_def->parts[0].type != FIELD_TYPE_STRING &&
 			index_def->key_def->parts[0].type != FIELD_TYPE_INTEGER &&
@@ -704,12 +716,7 @@ memtx_space_check_index_def(struct space *space, struct index_def *index_def)
 					 "ZCURVE index field type must be NUM or STR");
 			return -1;
 		}
-		if (index_def->key_def->is_multikey) {
-			diag_set(ClientError, ER_MODIFY_INDEX,
-					 index_def->name, space_name(space),
-					 "ZCURVE index cannot be multikey");
-			return -1;
-		}
+
 		break;
 	default:
 		diag_set(ClientError, ER_INDEX_TYPE,
