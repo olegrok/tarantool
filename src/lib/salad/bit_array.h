@@ -56,6 +56,16 @@ bit_array_length(const bit_array* bit_arr);
 bit_array*
 bit_array_clone(const bit_array* bitarr);
 
+bit_array***
+bit_array_interleave_new_lookup_tables(size_t dim);
+
+void
+bit_array_interleave_free_lookup_tables(bit_array ***table, size_t dim);
+
+int
+bit_array_interleave(bit_array ***tables, size_t dim,
+					 const uint64_t *in, bit_array *out);
+
 #define bit_array_get(arr,i)      bitset_get((arr)->words, i)
 #define bit_array_set(arr,i)      bitset_set((arr)->words, i)
 #define bit_array_clear(arr,i)    bitset_del((arr)->words, i)
