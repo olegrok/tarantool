@@ -212,20 +212,3 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 	bit_array_set(result, max_bp);
 	return result;
 }
-
-z_address*
-interleave_keys(const uint64_t *keys, size_t size)
-{
-	z_address* result = bit_array_create(size);
-	bit_array_clear_all(result);
-	uint64_t bit = 1;
-	for (size_t j = 0; j < KEY_SIZE_IN_BITS; j++) {
-		for (size_t i = 0; i < size; i++) {
-			if ((keys[i] & bit) != 0) {
-				bit_array_set(result, size * j + i);
-			}
-		}
-		bit <<= 1ULL;
-	}
-	return result;
-}
