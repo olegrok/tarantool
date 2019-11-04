@@ -69,6 +69,66 @@ pk = nil
 sk = nil
 
 -------------------------------------------------------------------------------
+-- single-part (signed float)
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('num', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}})
+sk = space:create_index('secondary', { type = 'zcurve', parts = {{2, 'number'}}})
+
+space:replace({0, 0})
+space:replace({1, 1.1})
+space:replace({2, 1.1})
+space:replace({3, -1.1})
+space:replace({4, -1.1})
+space:replace({5, -2})
+space:replace({6, -2})
+space:replace({7, 2})
+space:replace({8, 2})
+space:replace({9, 3})
+space:replace({10, -3})
+
+sk:select{}
+sk:select{0, 5}
+sk:select{-5, 0}
+sk:select{-5, 5}
+
+space:drop()
+space = nil
+pk = nil
+sk = nil
+
+-------------------------------------------------------------------------------
+-- single-part (signed integer)
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('num', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}})
+sk = space:create_index('secondary', { type = 'zcurve', parts = {{2, 'integer'}}})
+
+space:replace({0, 0})
+space:replace({1, 1})
+space:replace({2, 10})
+space:replace({3, -1})
+space:replace({4, -10})
+space:replace({5, -3})
+space:replace({6, -3})
+space:replace({7, 1})
+space:replace({8, 10})
+space:replace({9, -1})
+space:replace({10, -10})
+
+sk:select{}
+sk:select{0, 5}
+sk:select{-5, 0}
+sk:select{-5, 5}
+
+space:drop()
+space = nil
+pk = nil
+sk = nil
+
+-------------------------------------------------------------------------------
 -- single-part (string)
 -------------------------------------------------------------------------------
 
@@ -233,6 +293,41 @@ pk:select{}
 
 -- returns tuples in range
 sk:select{3, 3, 4, 4}
+
+-- check delete
+for i = 1, 9 do space:delete{i} end
+sk:select()
+
+space:drop()
+space = nil
+pk = nil
+sk = nil
+
+-------------------------------------------------------------------------------
+-- multi-part non-unique (float + integer) with negative
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('float_integer', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+sk = space:create_index('secondary', { type = 'zcurve', parts = {{2, 'number'}, {3, 'integer'}}, unique = false})
+
+space:insert{1, 2, -3}
+space:insert{2, 2, 3}
+space:insert{3, -2, 3}
+space:insert{4, 3, 4}
+space:insert{5, 3, 4}
+space:insert{6, 3.3, 4}
+space:insert{7, -3.4, 5}
+space:insert{8, 3, 5}
+space:insert{9, 3, -5}
+
+-- returns all tuples
+pk:select{}
+sk:select{}
+
+-- returns tuples in range
+sk:select{-99.99, 99.99, -100, 100}
+sk:select{-2, 2, -3, 3}
 
 space:drop()
 space = nil

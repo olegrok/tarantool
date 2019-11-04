@@ -79,9 +79,8 @@ memtx_zcurve_data_identical(const struct memtx_zcurve_data *a,
  */
 static inline int
 memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
-						 z_address* key_data)
+						 const z_address* key_data)
 {
-    assert(element->tuple != NULL && element->z_address != NULL);
     return z_value_cmp(element->z_address, key_data);
 }
 
@@ -134,12 +133,6 @@ struct memtx_zcurve_index {
 
 /* {{{ Utilities. *************************************************/
 
-static inline struct key_def *
-memtx_zcurve_cmp_def(struct memtx_zcurve *tree)
-{
-	return tree->arg;
-}
-
 static int
 memtx_zcurve_qcompare(const void* a, const void *b, void *c)
 {
@@ -167,6 +160,17 @@ toggle_high_bit(uint64_t key_part)
 }
 
 static uint64_t
+normalize_floating_point(double key_part)
+{
+	uint64_t value = *(uint64_t*)&key_part;
+	if (key_part < 0) {
+		return value ^ 0xFFFFFFFFFFFFFFFFULL;
+	} else {
+		return value ^ 0x8000000000000000ULL;
+	}
+}
+
+static uint64_t
 decode_uint(const char **mp)
 {
 	return mp_decode_uint(mp);
@@ -175,7 +179,6 @@ decode_uint(const char **mp)
 static uint64_t
 decode_number(const char **mp)
 {
-	uint64_t u_value;
 	double value = 0;
 	switch (mp_typeof(**mp)) {
 		case MP_FLOAT: {
@@ -197,14 +200,12 @@ decode_number(const char **mp)
 		default:
 			unreachable();
 	}
-	memcpy(&u_value, &value, sizeof(value));
-	return toggle_high_bit(u_value);
+	return normalize_floating_point(value);
 }
 
 static uint64_t
 decode_integer(const char **mp)
 {
-	uint64_t u_value;
 	int64_t value = 0;
 	switch (mp_typeof(**mp)) {
 		case MP_UINT: {
@@ -218,8 +219,7 @@ decode_integer(const char **mp)
 		default:
 			unreachable();
 	}
-	memcpy(&u_value, &value, sizeof(value));
-	return toggle_high_bit(u_value);
+	return toggle_high_bit(*(uint64_t*)&value);
 }
 
 static uint64_t
@@ -285,9 +285,9 @@ mp_decode_key(const char *mp, uint32_t part_count,
 		const struct memtx_zcurve_index *index)
 {
 	uint64_t key_parts[part_count];
+	enum field_type type = index->base.def->key_def->parts->type;
     for (uint32_t i = 0; i < part_count; ++i) {
-		key_parts[i] = mp_decode_to_uint64(&mp,
-				index->base.def->key_def->parts->type);
+		key_parts[i] = mp_decode_to_uint64(&mp, type);
     }
 	z_address* result = bit_array_create(part_count);
 	bit_array_interleave(index->lookup_tables, part_count, key_parts, result);
@@ -814,9 +814,8 @@ static void
 memtx_zcurve_index_end_build(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	struct key_def *cmp_arg = memtx_zcurve_cmp_def(&index->tree);
 	qsort_arg(index->build_array, index->build_array_size,
-		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, cmp_arg);
+		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, index->pk_def);
 	memtx_zcurve_build(&index->tree, index->build_array,
 			 index->build_array_size);
 
