@@ -18,20 +18,28 @@ ones(uint32_t part_count)
 	return result;
 }
 
-static size_t bit_position(size_t index_dim, uint32_t dim, uint8_t step) {
+static inline size_t
+bit_position(size_t index_dim, uint32_t dim, uint8_t step)
+{
 	return index_dim * step + dim;
 }
 
-static uint32_t get_dim(uint32_t index_dim, size_t bit_position) {
+static inline uint32_t
+get_dim(uint32_t index_dim, size_t bit_position)
+{
 	return bit_position % index_dim;
 }
 
-static uint8_t get_step(uint32_t index_dim, size_t bit_position) {
+static inline uint8_t
+get_step(uint32_t index_dim, size_t bit_position)
+{
 	return bit_position / index_dim;
 }
 
-bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
-				 const z_address* upper_bound) {
+bool
+z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
+		const z_address* upper_bound)
+{
 	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
 
@@ -76,8 +84,10 @@ bool z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 	return true;
 }
 
-z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
-						   const z_address* upper_bound, bool *in_query_box) {
+z_address*
+get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
+		const z_address* upper_bound, bool *in_query_box)
+{
 	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
 
@@ -127,7 +137,7 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 		}
 	} while (bp > 0);
 
-	// Next intersection point
+	/* Next intersection point */
 	bool is_nip = true;
 	for (uint32_t dim = 0; dim < index_dim; ++dim) {
 		if (flag[dim] != 0) {
@@ -163,7 +173,7 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 				break;
 			}
 		}
-		// some attributes have to be updated for further processing
+		/* some attributes have to be updated for further processing */
 		uint32_t max_bp_dim = get_dim(index_dim, max_bp);
 		save_min[max_bp_dim] = get_step(index_dim, max_bp);
 		flag[max_bp_dim] = 0;
@@ -171,11 +181,13 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 
 	for (uint32_t dim = 0; dim < index_dim; ++dim) {
 		if (flag[dim] >= 0) {
-			// nip has not fallen below the minimum in dim
+			/* nip has not fallen below the minimum in dim */
 			if (max_bp <= bit_position(index_dim, dim, save_min[dim])) {
-				// set all bits in dimension dim with
-				// bit position < max_bp to 0 because nip would not surely get below
-				// the lower_bound
+				/*
+				 * set all bits in dimension dim with
+				 * bit position < max_bp to 0 because nip would not surely get below
+				 * the lower_bound
+				 */
 				for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
 					 bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
@@ -184,9 +196,11 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 					bit_array_clear(result, bit_pos);
 				}
 			} else {
-				// set all bits in dimension dim with
-				// bit position < max_bp to the value of corresponding bits of the
-				// lower_bound
+				/*
+				 * set all bits in dimension dim with
+				 * bit position < max_bp to the value of corresponding bits of the
+				 * lower_bound
+				 */
 				for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
 					 bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
@@ -197,14 +211,15 @@ z_address* get_next_zvalue(const z_address* z_value, const z_address* lower_boun
 				}
 			}
 		} else {
-			// nip has fallen below the minimum in dim
-			// set all bits in dimension dim to the value of
-			// corresponding bits of the lower_bound because the minimum would not
-			// be exceeded otherwise
-			for (size_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
-				 bit_pos += index_dim) {
-				bit_array_assign(result, bit_pos,
-									 bit_array_get(lower_bound, bit_pos));
+			/*
+			 * nip has fallen below the minimum in dim
+			 * set all bits in dimension dim to the value of
+			 * corresponding bits of the lower_bound because the minimum would not
+			 * be exceeded otherwise
+			 */
+			const size_t length = index_dim * KEY_SIZE_IN_BITS - 1;
+			for (bp = dim; bp < length; bp += index_dim) {
+				bit_array_assign(result, bp,bit_array_get(lower_bound, bp));
 			}
 		}
 	}

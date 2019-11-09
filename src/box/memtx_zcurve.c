@@ -316,6 +316,7 @@ struct tree_iterator {
 
 	z_address* lower_bound;
 	z_address* upper_bound;
+	z_address *previous_key;
 
 	/** Memory pool the iterator was allocated from. */
 	struct mempool *pool;
@@ -344,6 +345,10 @@ tree_iterator_free(struct iterator *iterator)
 		z_value_free(it->upper_bound);
 		it->upper_bound = NULL;
 	}
+	if (it->previous_key != NULL) {
+		z_value_free(it->previous_key);
+		it->previous_key = NULL;
+	}
 	if (tuple != NULL) {
 		tuple_unref(tuple);
 	}
@@ -367,6 +372,11 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 			memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 
 	bool is_relevant = false;
+	if (it->previous_key != NULL && res != NULL &&
+		z_value_cmp(it->previous_key, res->z_address) == 0) {
+		is_relevant = true;
+	}
+
 	while (!is_relevant) {
 		if (res == NULL || z_value_cmp(res->z_address, it->upper_bound) > 0) {
 			iterator->next = tree_iterator_dummie;
@@ -375,7 +385,8 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 			return;
 		}
 
-		if (z_value_is_relevant(res->z_address, it->lower_bound, it->upper_bound)) {
+		if (z_value_is_relevant(res->z_address, it->lower_bound,
+				it->upper_bound)) {
 			break;
 		}
 
@@ -388,6 +399,11 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 		res = memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 		z_value_free(next_zvalue);
 	}
+
+	if (it->previous_key == NULL)
+		it->previous_key = bit_array_create(res->z_address->num_of_words);
+	bit_array_copy(res->z_address, it->previous_key);
+
 	*ret = res->tuple;
 	tuple_ref(*ret);
 	it->current = *res;
@@ -731,12 +747,14 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->type = type;
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
+	it->previous_key = NULL;
+	uint32_t key_def_part_count = base->def->key_def->part_count;
 	if (part_count == 0 || type == ITER_ALL) {
-		it->lower_bound = zeros(base->def->key_def->part_count);
-		it->upper_bound = ones(base->def->key_def->part_count);
+		it->lower_bound = zeros(key_def_part_count);
+		it->upper_bound = ones(key_def_part_count);
 	} else if (base->def->key_def->part_count == part_count) {
-		it->lower_bound = mp_decode_key(key, part_count, index);
-		it->upper_bound = ones(part_count);
+		it->lower_bound = mp_decode_key(key, key_def_part_count, index);
+		it->upper_bound = ones(key_def_part_count);
 	} else if (base->def->key_def->part_count * 2 == part_count) {
 		it->lower_bound = mp_decode_part(key, part_count, index, 0);
 		it->upper_bound = mp_decode_part(key, part_count, index, 1);

@@ -56,6 +56,9 @@ bit_array_length(const bit_array* bit_arr);
 bit_array*
 bit_array_clone(const bit_array* bitarr);
 
+void
+bit_array_copy(const bit_array* src, bit_array* dst);
+
 bit_array***
 bit_array_interleave_new_lookup_tables(size_t dim);
 
