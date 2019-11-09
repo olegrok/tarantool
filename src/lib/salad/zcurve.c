@@ -37,8 +37,8 @@ get_step(uint32_t index_dim, size_t bit_position)
 }
 
 bool
-z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
-		const z_address* upper_bound)
+z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
+		const z_address *upper_bound)
 {
 	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
@@ -51,15 +51,15 @@ z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 	}
 
 	size_t bp = key_len;
-	char z_value_bp, lower_bound_bp, upper_bound_bp;
+
 	do {
 		bp--;
 		uint32_t dim = get_dim(index_dim, bp);
 		uint8_t step = get_step(index_dim, bp);
 
-		z_value_bp = bit_array_get(z_value, bp);
-		lower_bound_bp = bit_array_get(lower_bound, bp);
-		upper_bound_bp = bit_array_get(upper_bound, bp);
+		char z_value_bp = bit_array_get(z_value, bp);
+		char lower_bound_bp = bit_array_get(lower_bound, bp);
+		char upper_bound_bp = bit_array_get(upper_bound, bp);
 
 		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
@@ -84,14 +84,13 @@ z_value_is_relevant(const z_address* z_value, const z_address* lower_bound,
 	return true;
 }
 
-z_address*
-get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
-		const z_address* upper_bound, bool *in_query_box)
+void
+get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
+		const z_address *upper_bound, z_address *out)
 {
+	bit_array_copy(z_value, out);
 	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
-
-	z_address* result = bit_array_clone(z_value);
 
 	int8_t flag[index_dim], out_step[index_dim];
 	int32_t save_min[index_dim], save_max[index_dim];
@@ -104,15 +103,14 @@ get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 	}
 
 	size_t bp = key_len;
-	char z_value_bp, lower_bound_bp, upper_bound_bp;
 	do {
 		bp--;
 		uint32_t dim = get_dim(index_dim, bp);
 		uint8_t step = get_step(index_dim, bp);
 
-		z_value_bp = bit_array_get(result, bp);
-		lower_bound_bp = bit_array_get(lower_bound, bp);
-		upper_bound_bp = bit_array_get(upper_bound, bp);
+		char z_value_bp = bit_array_get(z_value, bp);
+		char lower_bound_bp = bit_array_get(lower_bound, bp);
+		char upper_bound_bp = bit_array_get(upper_bound, bp);
 
 		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
@@ -144,12 +142,9 @@ get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 			is_nip = false;
 		}
 	}
-	if (in_query_box != NULL) {
-		*in_query_box = is_nip;
-	}
 
 	if (is_nip) {
-		return result;
+		return;
 	}
 
 	uint32_t max_dim = 0;
@@ -168,7 +163,7 @@ get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 	if (flag[max_dim] == 1) {
 		for (size_t new_bp = max_bp + 1; new_bp < key_len; ++new_bp) {
 			if (get_step(index_dim, new_bp) <= save_max[get_dim(index_dim, new_bp)] &&
-				bit_array_get(result, new_bp) == 0) {
+				bit_array_get(z_value, new_bp) == 0) {
 				max_bp = new_bp;
 				break;
 			}
@@ -193,7 +188,7 @@ get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 					if (bit_pos >= max_bp) {
 						break;
 					}
-					bit_array_clear(result, bit_pos);
+					bit_array_clear(out, bit_pos);
 				}
 			} else {
 				/*
@@ -206,7 +201,7 @@ get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 					if (bit_pos >= max_bp) {
 						break;
 					}
-					bit_array_assign(result, bit_pos,
+					bit_array_assign(out, bit_pos,
 										 bit_array_get(lower_bound, bit_pos));
 				}
 			}
@@ -219,11 +214,10 @@ get_next_zvalue(const z_address* z_value, const z_address* lower_bound,
 			 */
 			const size_t length = index_dim * KEY_SIZE_IN_BITS - 1;
 			for (bp = dim; bp < length; bp += index_dim) {
-				bit_array_assign(result, bp,bit_array_get(lower_bound, bp));
+				bit_array_assign(out, bp,bit_array_get(lower_bound, bp));
 			}
 		}
 	}
 
-	bit_array_set(result, max_bp);
-	return result;
+	bit_array_set(out, max_bp);
 }

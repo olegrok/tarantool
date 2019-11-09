@@ -13,8 +13,6 @@ create_key2d_from_number(uint64_t num)
 
 void
 next_jump_in_check_2d() {
-	size_t test_plan = 19;
-	plan(2 * test_plan);
     struct test_case {
         uint64_t test_point;
         uint64_t expected;
@@ -44,26 +42,24 @@ next_jump_in_check_2d() {
 			{ 49, 50 },
 			{ 50, 50 },
 	};
+	size_t test_plan = sizeof(test_cases) / sizeof(struct test_case);
+	plan(test_plan);
 
 	z_address *z_lower_bound = create_key2d_from_number(lower_bound);
 	z_address *z_upper_bound = create_key2d_from_number(upper_bound);
+	z_address *result = bit_array_create(2);
 
 	for (size_t i = 0; i < test_plan; ++i) {
 		z_address *value = create_key2d_from_number(test_cases[i].test_point);
 		z_address *expected = create_key2d_from_number(test_cases[i].expected);
-		bool in_query_box;
-		z_address *result = get_next_zvalue(value, z_lower_bound,
-				z_upper_bound, &in_query_box);
+		get_next_zvalue(value, z_lower_bound, z_upper_bound, result);
 		is(bit_array_cmp(result, expected), 0, "%" PRIu64 " -> %" PRIu64,
 				test_cases[i].test_point, test_cases[i].expected);
-		bool test_case_in_qb = test_cases[i].test_point == test_cases[i].expected;
-		is(test_case_in_qb, in_query_box,
-				test_case_in_qb ? "in query box" : "not in query box")
-		bit_array_free(result);
 		bit_array_free(value);
 		bit_array_free(expected);
 	}
 
+	bit_array_free(result);
 	bit_array_free(z_lower_bound);
 	bit_array_free(z_upper_bound);
 	footer();
