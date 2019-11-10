@@ -9,6 +9,7 @@
 typedef bit_array z_address;
 #define z_value_free bit_array_free
 #define z_value_cmp bit_array_cmp
+#define z_value_create bit_array_create
 
 enum {
 	/** Maximal possible Z-order curve dimension */
