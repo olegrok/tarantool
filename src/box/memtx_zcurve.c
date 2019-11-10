@@ -50,6 +50,8 @@ struct memtx_zcurve_data {
 	z_address *z_address;
 	/* Tuple that this node is represents. */
 	struct tuple *tuple;
+	/** Comparison hint, see key_hint(). */
+	hint_t hint;
 };
 
 /**
@@ -92,8 +94,8 @@ memtx_zcurve_elem_compare(const void *a, const void *b, void *c)
 	struct key_def *pk_def = c;
 	int result = z_value_cmp(elem_a->z_address, elem_b->z_address);
 	if (result == 0) {
-		return tuple_compare(elem_a->tuple, HINT_NONE, elem_b->tuple,
-							 HINT_NONE, pk_def);
+		return tuple_compare(elem_a->tuple, elem_a->hint, elem_b->tuple,
+							 elem_b->hint, pk_def);
 	}
 	return result;
 }
@@ -125,8 +127,6 @@ struct memtx_zcurve_index {
 	struct memtx_zcurve tree;
 	struct memtx_zcurve_data *build_array;
 	size_t build_array_size, build_array_alloc_size;
-	struct memtx_gc_task gc_task;
-	struct memtx_zcurve_iterator gc_iterator;
 	struct key_def *pk_def;
 	struct bit_array ***lookup_tables;
 };
@@ -275,7 +275,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
         }
     }
     uint32_t size = part_count / 2;
-	z_address* result = bit_array_create(size);
+	z_address* result = z_value_create(size);
     bit_array_interleave(index->lookup_tables, size, key_parts, result);
     return result;
 }
@@ -289,7 +289,7 @@ mp_decode_key(const char *mp, uint32_t part_count,
     for (uint32_t i = 0; i < part_count; ++i) {
 		key_parts[i] = mp_decode_to_uint64(&mp, type);
     }
-	z_address* result = bit_array_create(part_count);
+	z_address* result = z_value_create(part_count);
 	bit_array_interleave(index->lookup_tables, part_count, key_parts, result);
     return result;
 }
@@ -405,7 +405,7 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 
 	if (key_is_changed) {
 		if (it->previous_key == NULL)
-			it->previous_key = bit_array_create(res->z_address->num_of_words);
+			it->previous_key = z_value_create(res->z_address->num_of_words);
 		bit_array_copy(res->z_address, it->previous_key);
 	}
 
@@ -523,8 +523,12 @@ tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 static void
 memtx_zcurve_index_free(struct memtx_zcurve_index *index)
 {
-	memtx_zcurve_destroy(&index->tree);
+	for (size_t i = 0; i < index->build_array_size; i++) {
+		z_value_free(index->build_array[i].z_address);
+	}
 	free(index->build_array);
+	memtx_zcurve_destroy(&index->tree);
+
 	key_def_delete(index->pk_def);
 	uint32_t part_count = index->base.def->key_def->part_count;
 	bit_array_interleave_free_lookup_tables(index->lookup_tables, part_count);
@@ -532,71 +536,15 @@ memtx_zcurve_index_free(struct memtx_zcurve_index *index)
 }
 
 static void
-memtx_zcurve_index_gc_run(struct memtx_gc_task *task, bool *done)
-{
-	/*
-	 * Yield every 1K tuples to keep latency < 0.1 ms.
-	 * Yield more often in debug mode.
-	 */
-#ifdef NDEBUG
-	enum { YIELD_LOOPS = 1000 };
-#else
-	enum { YIELD_LOOPS = 10 };
-#endif
-
-	struct memtx_zcurve_index *index = container_of(task,
-			struct memtx_zcurve_index, gc_task);
-	struct memtx_zcurve *tree = &index->tree;
-	struct memtx_zcurve_iterator *itr = &index->gc_iterator;
-
-	unsigned int loops = 0;
-	while (!memtx_zcurve_iterator_is_invalid(itr)) {
-		struct memtx_zcurve_data *res =
-			memtx_zcurve_iterator_get_elem(tree, itr);
-		memtx_zcurve_iterator_next(tree, itr);
-		tuple_unref(res->tuple);
-		if (++loops >= YIELD_LOOPS) {
-			*done = false;
-			return;
-		}
-	}
-	*done = true;
-}
-
-static void
-memtx_zcurve_index_gc_free(struct memtx_gc_task *task)
-{
-	struct memtx_zcurve_index *index = container_of(task,
-			struct memtx_zcurve_index, gc_task);
-	memtx_zcurve_index_free(index);
-}
-
-static const struct memtx_gc_task_vtab memtx_zcurve_index_gc_vtab = {
-	.run = memtx_zcurve_index_gc_run,
-	.free = memtx_zcurve_index_gc_free,
-};
-
-static void
 memtx_zcurve_index_destroy(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	struct memtx_engine *memtx = (struct memtx_engine *)base->engine;
-	if (base->def->iid == 0) {
-		/*
-		 * Primary index. We need to free all tuples stored
-		 * in the index, which may take a while. Schedule a
-		 * background task in order not to block tx thread.
-		 */
-		index->gc_task.vtab = &memtx_zcurve_index_gc_vtab;
-		index->gc_iterator = memtx_zcurve_iterator_first(&index->tree);
-		memtx_engine_schedule_gc(memtx, &index->gc_task);
-	} else {
-		/*
-		 * Secondary index. Destruction is fast, no need to
-		 * hand over to background fiber.
-		 */
-		memtx_zcurve_index_free(index);
-	}
+	/*
+	 * Only secondary index is available.
+	 * Destruction is fast, no need to
+	 * hand over to background fiber.
+	 */
+	memtx_zcurve_index_free(index);
 }
 
 static void
@@ -631,7 +579,7 @@ memtx_zcurve_index_bsize(struct index *base)
 	uint32_t dimension = index->base.def->key_def->part_count;
 	ssize_t tree_size = memtx_zcurve_size(&index->tree);
 	size_t result = memtx_zcurve_mem_used(&index->tree);
-	size_t elem_size = sizeof(z_address) + dimension * sizeof(word_t);
+	size_t elem_size = bit_array_bsize(dimension);
 	result += tree_size * elem_size;
 	return result;
 }
@@ -680,6 +628,7 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 		struct memtx_zcurve_data new_data;
 		new_data.tuple = new_tuple;
         new_data.z_address = extract_zaddress(new_tuple, index);
+        new_data.hint = tuple_hint(new_tuple, index->pk_def);
 		struct memtx_zcurve_data dup_data;
 		dup_data.tuple = NULL;
 		dup_data.z_address = NULL;
@@ -695,6 +644,7 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 
 		if (dup_data.tuple != NULL) {
 			*result = dup_data.tuple;
+			z_value_free(dup_data.z_address);
 			return 0;
 		}
 	}
@@ -702,8 +652,9 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 		struct memtx_zcurve_data old_data;
 		old_data.tuple = old_tuple;
 		old_data.z_address = extract_zaddress(old_tuple, index);
+		old_data.hint = tuple_hint(old_tuple, index->pk_def);
 		memtx_zcurve_delete(&index->tree, old_data);
-//		z_value_free(old_data.z_address);
+		z_value_free(old_data.z_address);
 	}
 	*result = old_tuple;
 	return 0;
@@ -756,7 +707,7 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
 	it->previous_key = NULL;
-	it->next_zvalue = bit_array_create(key_def_part_count);
+	it->next_zvalue = z_value_create(key_def_part_count);
 
 	if (part_count == 0 || type == ITER_ALL) {
 		it->lower_bound = zeros(key_def_part_count);
@@ -834,6 +785,7 @@ memtx_zcurve_index_build_next(struct index *base, struct tuple *tuple)
 		&index->build_array[index->build_array_size++];
 	elem->tuple = tuple;
 	elem->z_address = extract_zaddress(tuple, index);
+	elem->hint = tuple_hint(tuple, index->pk_def);
 	return 0;
 }
 
