@@ -41,7 +41,5 @@
 #define bit_array_num_of_words(arr) ((arr)->num_of_words)
 
 #define bitmask(nbits,type) ((nbits) ? ~(type)0 >> (sizeof(type)*8-(nbits)): (type)0)
-#define bitmask64(nbits) bitmask(nbits,uint64_t)
-#define bitmask_merge(a,b,abits) (b ^ ((a ^ b) & abits))
 
 #endif //BIT_ARRAY_MACROS_H
