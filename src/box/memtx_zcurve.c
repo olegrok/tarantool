@@ -6,13 +6,13 @@
  * conditions are met:
  *
  * 1. Redistributions of source code must retain the above
- *    copyright notice, this list of conditions and the
- *    following disclaimer.
+ *	copyright notice, this list of conditions and the
+ *	following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above
- *    copyright notice, this list of conditions and the following
- *    disclaimer in the documentation and/or other materials
- *    provided with the distribution.
+ *	copyright notice, this list of conditions and the following
+ *	disclaimer in the documentation and/or other materials
+ *	provided with the distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY <COPYRIGHT HOLDER> ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +46,7 @@
  * Struct that is used as a elem in BPS tree definition.
  */
 struct memtx_zcurve_data {
-    /** Z-address. Read here: https://en.wikipedia.org/wiki/Z-order_curve */
+	/** Z-address. Read here: https://en.wikipedia.org/wiki/Z-order_curve */
 	z_address *z_address;
 	/* Tuple that this node is represents. */
 	struct tuple *tuple;
@@ -83,7 +83,7 @@ static inline int
 memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
 						 const z_address* key_data)
 {
-    return z_value_cmp(element->z_address, key_data);
+	return z_value_cmp(element->z_address, key_data);
 }
 
 static inline int
@@ -155,8 +155,8 @@ str_to_key_part(const char *src, size_t len)
 static uint64_t
 toggle_high_bit(uint64_t key_part)
 {
-    key_part ^= (1ULL << 63ULL);
-    return key_part;
+	key_part ^= (1ULL << 63ULL);
+	return key_part;
 }
 
 static uint64_t
@@ -226,7 +226,7 @@ static uint64_t
 decode_str(const char **mp)
 {
 	uint32_t value_len = 0;
-	const char* value = mp_decode_str(mp, &value_len);
+	const char *value = mp_decode_str(mp, &value_len);
 	return str_to_key_part(value, value_len);
 }
 
@@ -255,29 +255,33 @@ static z_address*
 mp_decode_part(const char *mp, uint32_t part_count,
 			   const struct memtx_zcurve_index *index, uint32_t even)
 {
-	uint64_t key_parts[part_count / 2];
-    for (uint32_t j = 0; j < part_count; ++j) {
-        uint32_t i = j / 2;
-        if (j % 2 != even) {
-            mp_next(&mp);
-            continue;
-        }
-        if (mp_typeof(*mp) == MP_NIL) {
-            if (j % 2 == 0) {
-                key_parts[i] = 0;
-            } else {
-                key_parts[i] = -1ULL;
-            }
+	const uint32_t size = part_count / 2;
+	uint64_t key_parts[size];
+	for (uint32_t i = 0; i < part_count; ++i) {
+		if (i % 2 != even) {
 			mp_next(&mp);
-        } else {
-			key_parts[i] = mp_decode_to_uint64(&mp,
+			continue;
+		}
+		uint32_t j = i / 2;
+		if (unlikely(mp_typeof(*mp) == MP_NIL)) {
+			if (i % 2 == 0) {
+				key_parts[j] = 0;
+			} else {
+				key_parts[j] = -1ULL;
+			}
+			mp_next(&mp);
+		} else {
+			key_parts[j] = mp_decode_to_uint64(&mp,
 					index->base.def->key_def->parts->type);
-        }
-    }
-    uint32_t size = part_count / 2;
-	z_address* result = z_value_create(size);
-    bit_array_interleave(index->lookup_tables, size, key_parts, result);
-    return result;
+		}
+	}
+
+	z_address *result = z_value_create(size);
+	if (result == NULL) {
+		return NULL;
+	}
+	bit_array_interleave(index->lookup_tables, size, key_parts, result);
+	return result;
 }
 
 static z_address*
@@ -286,12 +290,15 @@ mp_decode_key(const char *mp, uint32_t part_count,
 {
 	uint64_t key_parts[part_count];
 	enum field_type type = index->base.def->key_def->parts->type;
-    for (uint32_t i = 0; i < part_count; ++i) {
+	for (uint32_t i = 0; i < part_count; ++i) {
 		key_parts[i] = mp_decode_to_uint64(&mp, type);
-    }
-	z_address* result = z_value_create(part_count);
+	}
+	z_address *result = z_value_create(part_count);
+	if (result == NULL) {
+		return NULL;
+	}
 	bit_array_interleave(index->lookup_tables, part_count, key_parts, result);
-    return result;
+	return result;
 }
 
 /* Extract z-address from tuple */
@@ -299,12 +306,12 @@ static z_address*
 extract_zaddress(struct tuple *tuple,
 		const struct memtx_zcurve_index *index)
 {
-    uint32_t key_size;
+	uint32_t key_size;
 	struct key_def *key_def = index->base.def->key_def;
-    const char* key = tuple_extract_key(tuple, key_def,
-    		MULTIKEY_NONE, &key_size);
-    mp_decode_array(&key);
-    return mp_decode_key(key, key_def->part_count, index);
+	const char* key = tuple_extract_key(tuple, key_def,
+			MULTIKEY_NONE, &key_size);
+	mp_decode_array(&key);
+	return mp_decode_key(key, key_def->part_count, index);
 }
 
 /* {{{ MemtxTree Iterators ****************************************/
@@ -596,7 +603,7 @@ memtx_zcurve_index_random(struct index *base, uint32_t rnd,
 
 static ssize_t
 memtx_zcurve_index_count(struct index *base, enum iterator_type type,
-		       const char *key, uint32_t part_count)
+			   const char *key, uint32_t part_count)
 {
 	if (type == ITER_ALL)
 		return memtx_zcurve_index_size(base); /* optimization */
@@ -605,10 +612,10 @@ memtx_zcurve_index_count(struct index *base, enum iterator_type type,
 
 static int
 memtx_zcurve_index_get(struct index *base, const char *key,
-		     uint32_t part_count, struct tuple **result)
+			 uint32_t part_count, struct tuple **result)
 {
 	assert(base->def->opts.is_unique &&
-	       part_count == base->def->key_def->part_count);
+		   part_count == base->def->key_def->part_count);
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	z_address* key_data = mp_decode_key(key, part_count, index);
 	struct memtx_zcurve_data *res = memtx_zcurve_find(&index->tree, key_data);
@@ -627,8 +634,8 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 	if (new_tuple) {
 		struct memtx_zcurve_data new_data;
 		new_data.tuple = new_tuple;
-        new_data.z_address = extract_zaddress(new_tuple, index);
-        new_data.hint = tuple_hint(new_tuple, index->pk_def);
+		new_data.z_address = extract_zaddress(new_tuple, index);
+		new_data.hint = tuple_hint(new_tuple, index->pk_def);
 		struct memtx_zcurve_data dup_data;
 		dup_data.tuple = NULL;
 		dup_data.z_address = NULL;
@@ -903,7 +910,7 @@ struct index *
 memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 {
 	if (def->key_def->part_count < 1 ||
-	        def->key_def->part_count > ZCURVE_MAX_DIMENSION) {
+			def->key_def->part_count > ZCURVE_MAX_DIMENSION) {
 		diag_set(UnsupportedIndexFeature, def,
 				 tt_sprintf("dimension (%lld): must belong to "
 							"range [%u, %u]", def->key_def->part_count,

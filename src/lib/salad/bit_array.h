@@ -6,7 +6,6 @@
 
 typedef struct bit_array bit_array;
 typedef uint64_t word_t, word_addr_t, bit_index_t;
-typedef uint8_t word_offset_t; // Offset within a 64 bit word
 
 #define BIT_INDEX_MIN 0
 #define BIT_INDEX_MAX (~(bit_index_t)0)
@@ -73,7 +72,6 @@ bit_array_interleave(bit_array ***tables, size_t dim,
 #define bit_array_set(arr,i)      bitset_set((arr)->words, i)
 #define bit_array_clear(arr,i)    bitset_del((arr)->words, i)
 #define bit_array_toggle(arr,i)   bitset_tgl((arr)->words, i)
-// c must be 0 or 1
 #define bit_array_assign(arr,i,c) bitset_cpy((arr)->words,i,c)
 
 #ifdef __cplusplus

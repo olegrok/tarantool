@@ -1,11 +1,11 @@
 #include "zcurve.h"
 
-#define KEY_SIZE_IN_BITS (64lu)
+#define KEY_SIZE_IN_BITS (64ULL)
 
 z_address*
 zeros(uint32_t part_count)
 {
-	z_address* result = bit_array_create(part_count);
+	z_address *result = bit_array_create(part_count);
 	bit_array_clear_all(result);
 	return result;
 }
@@ -13,7 +13,7 @@ zeros(uint32_t part_count)
 z_address*
 ones(uint32_t part_count)
 {
-	z_address* result = bit_array_create(part_count);
+	z_address *result = bit_array_create(part_count);
 	bit_array_set_all(result);
 	return result;
 }
@@ -43,42 +43,35 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
 
-	int32_t save_min[index_dim], save_max[index_dim];
-
-	for (uint32_t i = 0; i < index_dim; ++i) {
-		save_min[i] = -1;
-		save_max[i] = -1;
-	}
+	uint64_t save_min = 0, save_max = 0;
+	uint64_t is_relevant_mask = (-1ULL >> (KEY_SIZE_IN_BITS - index_dim));
 
 	size_t bp = key_len;
 
 	do {
 		bp--;
 		uint32_t dim = get_dim(index_dim, bp);
-		uint8_t step = get_step(index_dim, bp);
 
 		char z_value_bp = bit_array_get(z_value, bp);
 		char lower_bound_bp = bit_array_get(lower_bound, bp);
 		char upper_bound_bp = bit_array_get(upper_bound, bp);
 
-		if (z_value_bp > lower_bound_bp) {
-			if (save_min[dim] == -1) {
-				save_min[dim] = step;
-			}
-		} else if (z_value_bp < lower_bound_bp) {
-			if (save_min[dim] == -1) {
-				return false;
-			}
+		uint8_t save_min_dim_bit = bitset_get(&save_min, dim);
+		if (save_min_dim_bit == 0 && z_value_bp > lower_bound_bp) {
+			bitset_set(&save_min, dim);
+		} else if (save_min_dim_bit == 0 && z_value_bp < lower_bound_bp) {
+			return false;
 		}
 
-		if (z_value_bp < upper_bound_bp) {
-			if (save_max[dim] == -1) {
-				save_max[dim] = step;
-			}
-		} else if (z_value_bp > upper_bound_bp) {
-			if (save_max[dim] == -1) {
-				return false;
-			}
+		uint8_t save_max_dim_bit = bitset_get(&save_max, dim);
+		if (save_max_dim_bit == 0 && z_value_bp < upper_bound_bp) {
+			bitset_set(&save_max, dim);
+		} else if (save_max_dim_bit == 0 && z_value_bp > upper_bound_bp) {
+			return false;
+		}
+
+		if (save_max == is_relevant_mask && save_min == is_relevant_mask) {
+			return true;
 		}
 	} while (bp > 0);
 	return true;
@@ -140,6 +133,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 	for (uint32_t dim = 0; dim < index_dim; ++dim) {
 		if (flag[dim] != 0) {
 			is_nip = false;
+			break;
 		}
 	}
 
