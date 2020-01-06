@@ -81,7 +81,7 @@ void
 get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 		const z_address *upper_bound, z_address *out)
 {
-	bit_array_copy(z_value, out);
+	bit_array_copy(out, z_value);
 	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
 

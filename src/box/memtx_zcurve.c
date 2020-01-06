@@ -128,7 +128,7 @@ struct memtx_zcurve_index {
 	struct memtx_zcurve_data *build_array;
 	size_t build_array_size, build_array_alloc_size;
 	struct key_def *pk_def;
-	struct bit_array ***lookup_tables;
+	struct bit_array_interleave_lookup_table *lookup_tables;
 };
 
 /* {{{ Utilities. *************************************************/
@@ -280,7 +280,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
 	if (result == NULL) {
 		return NULL;
 	}
-	bit_array_interleave(index->lookup_tables, size, key_parts, result);
+	bit_array_interleave(index->lookup_tables, key_parts, result);
 	return result;
 }
 
@@ -297,7 +297,7 @@ mp_decode_key(const char *mp, uint32_t part_count,
 	if (result == NULL) {
 		return NULL;
 	}
-	bit_array_interleave(index->lookup_tables, part_count, key_parts, result);
+	bit_array_interleave(index->lookup_tables, key_parts, result);
 	return result;
 }
 
@@ -413,7 +413,7 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 	if (key_is_changed) {
 		if (it->previous_key == NULL)
 			it->previous_key = z_value_create(res->z_address->num_of_words);
-		bit_array_copy(res->z_address, it->previous_key);
+		bit_array_copy(it->previous_key, res->z_address);
 	}
 
 	*ret = res->tuple;
@@ -537,8 +537,7 @@ memtx_zcurve_index_free(struct memtx_zcurve_index *index)
 	memtx_zcurve_destroy(&index->tree);
 
 	key_def_delete(index->pk_def);
-	uint32_t part_count = index->base.def->key_def->part_count;
-	bit_array_interleave_free_lookup_tables(index->lookup_tables, part_count);
+	bit_array_interleave_free_lookup_tables(index->lookup_tables);
 	free(index);
 }
 
