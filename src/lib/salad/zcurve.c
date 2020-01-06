@@ -40,13 +40,12 @@ bool
 z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 		const z_address *upper_bound)
 {
-	const size_t key_len = bit_array_length(z_value);
 	const uint32_t index_dim = bit_array_num_of_words(z_value);
 
 	uint64_t save_min = 0, save_max = 0;
 	uint64_t is_relevant_mask = (-1ULL >> (KEY_SIZE_IN_BITS - index_dim));
 
-	size_t bp = key_len;
+	size_t bp = bit_array_length(z_value);
 
 	do {
 		bp--;

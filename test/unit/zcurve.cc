@@ -2,7 +2,7 @@
 #include "salad/zcurve.h"
 #include "salad/bit_array.h"
 
-static z_address*
+static z_address *
 create_key2d_from_number(uint64_t num)
 {
 	z_address *key = bit_array_create(2);

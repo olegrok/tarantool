@@ -375,7 +375,7 @@ tree_iterator_dummie(struct iterator *iterator, struct tuple **ret)
 	return 0;
 }
 
-static void
+static inline void
 tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 	struct memtx_zcurve_index *index =
 			(struct memtx_zcurve_index *)iterator->index;
@@ -392,17 +392,19 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 	}
 
 	while (!is_relevant) {
-		if (res == NULL || z_value_cmp(res->z_address, it->upper_bound) > 0) {
-			iterator->next = tree_iterator_dummie;
-			it->current.tuple = NULL;
-			*ret = NULL;
-			return;
+		if (res == NULL) {
+			goto out;
 		}
 
 		if (z_value_is_relevant(res->z_address, it->lower_bound,
 				it->upper_bound)) {
 			break;
 		}
+
+		if (z_value_cmp(res->z_address, it->upper_bound) > 0) {
+			goto out;
+		}
+
 		get_next_zvalue(res->z_address, it->lower_bound, it->upper_bound,
 				it->next_zvalue);
 		it->tree_iterator = memtx_zcurve_lower_bound(&index->tree,
@@ -419,6 +421,12 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 	*ret = res->tuple;
 	tuple_ref(*ret);
 	it->current = *res;
+	return;
+
+out:
+	iterator->next = tree_iterator_dummie;
+	it->current.tuple = NULL;
+	*ret = NULL;
 }
 
 static int
@@ -464,8 +472,7 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	/* Use user key def to save a few loops. */
 	// TODO: check that value is relevant and not at the end
 	if (res == NULL ||
-			memtx_zcurve_compare_key(res,
-					  it->current.z_address) != 0) {
+			memtx_zcurve_compare_key(res, it->current.z_address) != 0) {
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
 		it->current.z_address = NULL;
@@ -546,7 +553,6 @@ memtx_zcurve_index_destroy(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	/*
-	 * Only secondary index is available.
 	 * Destruction is fast, no need to
 	 * hand over to background fiber.
 	 */
