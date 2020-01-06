@@ -7,9 +7,6 @@
 typedef struct bit_array bit_array;
 typedef uint64_t word_t, word_addr_t, bit_index_t;
 
-#define BIT_INDEX_MIN 0
-#define BIT_INDEX_MAX (~(bit_index_t)0)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,27 +49,44 @@ bit_array_shift_left(bit_array* bitarr, bit_index_t shift_dist);
 bit_index_t
 bit_array_length(const bit_array* bit_arr);
 
-bit_array*
+bit_array *
 bit_array_clone(const bit_array* bitarr);
 
-void
-bit_array_copy(const bit_array* src, bit_array* dst);
-
-bit_array***
-bit_array_interleave_new_lookup_tables(size_t dim);
-
-void
-bit_array_interleave_free_lookup_tables(bit_array ***table, size_t dim);
-
-int
-bit_array_interleave(bit_array ***tables, size_t dim,
-					 const uint64_t *in, bit_array *out);
+bit_array *
+bit_array_copy(bit_array *dst, const bit_array *src);
 
 #define bit_array_get(arr,i)      bitset_get((arr)->words, i)
 #define bit_array_set(arr,i)      bitset_set((arr)->words, i)
 #define bit_array_clear(arr,i)    bitset_del((arr)->words, i)
 #define bit_array_toggle(arr,i)   bitset_tgl((arr)->words, i)
 #define bit_array_assign(arr,i,c) bitset_cpy((arr)->words,i,c)
+
+struct bit_array_interleave_lookup_table {
+	/**
+	 * Contains octet lookup table with
+	 * shifts for each dimension
+	 */
+	bit_array ***tables;
+	/**
+	 * Preallocated buffer using in process of interleaving
+	 */
+	bit_array *buffer;
+	/**
+	 * Amount of dimensions
+	 */
+	size_t dim;
+};
+
+struct bit_array_interleave_lookup_table *
+bit_array_interleave_new_lookup_tables(size_t dim);
+
+void
+bit_array_interleave_free_lookup_tables(
+		struct bit_array_interleave_lookup_table *table);
+
+int
+bit_array_interleave(struct bit_array_interleave_lookup_table *table,
+					 const uint64_t *in, bit_array *out);
 
 #ifdef __cplusplus
 }
