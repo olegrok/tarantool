@@ -50,8 +50,6 @@ struct memtx_zcurve_data {
 	z_address *z_address;
 	/* Tuple that this node is represents. */
 	struct tuple *tuple;
-	/** Comparison hint, see key_hint(). */
-	hint_t hint;
 };
 
 /**
@@ -94,8 +92,8 @@ memtx_zcurve_elem_compare(const void *a, const void *b, void *c)
 	struct key_def *pk_def = c;
 	int result = z_value_cmp(elem_a->z_address, elem_b->z_address);
 	if (result == 0) {
-		return tuple_compare(elem_a->tuple, elem_a->hint, elem_b->tuple,
-							 elem_b->hint, pk_def);
+		return tuple_compare(elem_a->tuple, HINT_NONE, elem_b->tuple,
+							 HINT_NONE, pk_def);
 	}
 	return result;
 }
@@ -616,20 +614,6 @@ memtx_zcurve_index_count(struct index *base, enum iterator_type type,
 }
 
 static int
-memtx_zcurve_index_get(struct index *base, const char *key,
-			 uint32_t part_count, struct tuple **result)
-{
-	assert(base->def->opts.is_unique &&
-		   part_count == base->def->key_def->part_count);
-	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
-	z_address* key_data = mp_decode_key(key, part_count, index);
-	struct memtx_zcurve_data *res = memtx_zcurve_find(&index->tree, key_data);
-	*result = res != NULL ? res->tuple : NULL;
-	z_value_free(key_data);
-	return 0;
-}
-
-static int
 memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 			 struct tuple *new_tuple, enum dup_replace_mode mode,
 			 struct tuple **result)
@@ -640,7 +624,6 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 		struct memtx_zcurve_data new_data;
 		new_data.tuple = new_tuple;
 		new_data.z_address = extract_zaddress(new_tuple, index);
-		new_data.hint = tuple_hint(new_tuple, index->pk_def);
 		struct memtx_zcurve_data dup_data;
 		dup_data.tuple = NULL;
 		dup_data.z_address = NULL;
@@ -661,12 +644,12 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 		}
 	}
 	if (old_tuple) {
-		struct memtx_zcurve_data old_data;
+		struct memtx_zcurve_data old_data, deleted_value;
 		old_data.tuple = old_tuple;
 		old_data.z_address = extract_zaddress(old_tuple, index);
-		old_data.hint = tuple_hint(old_tuple, index->pk_def);
-		memtx_zcurve_delete(&index->tree, old_data);
+		memtx_zcurve_delete_value(&index->tree, old_data, &deleted_value);
 		z_value_free(old_data.z_address);
+		z_value_free(deleted_value.z_address);
 	}
 	*result = old_tuple;
 	return 0;
@@ -797,7 +780,6 @@ memtx_zcurve_index_build_next(struct index *base, struct tuple *tuple)
 		&index->build_array[index->build_array_size++];
 	elem->tuple = tuple;
 	elem->z_address = extract_zaddress(tuple, index);
-	elem->hint = tuple_hint(tuple, index->pk_def);
 	return 0;
 }
 
@@ -897,7 +879,7 @@ static const struct index_vtab memtx_zcurve_index_vtab = {
 	/* .max = */ generic_index_max,
 	/* .random = */ memtx_zcurve_index_random,
 	/* .count = */ memtx_zcurve_index_count,
-	/* .get = */ memtx_zcurve_index_get,
+	/* .get = */ generic_index_get,
 	/* .replace = */ memtx_zcurve_index_replace,
 	/* .create_iterator = */ memtx_zcurve_index_create_iterator,
 	/* .create_snapshot_iterator = */
