@@ -335,6 +335,28 @@ pk = nil
 sk = nil
 
 -------------------------------------------------------------------------------
+-- multi-part non-unique values
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('non_unique', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+sk = space:create_index('secondary', { type = 'zcurve', parts = {{2, 'unsigned'}}, unique = false})
+
+space:insert{2, 2}
+for i = 3, 6 do \
+    space:insert{i, 3} \
+end
+space:insert{7, 7}
+
+sk:select({3}, 'EQ')
+sk:select({3}, 'GE')
+
+space:drop()
+space = nil
+pk = nil
+sk = nil
+
+-------------------------------------------------------------------------------
 -- nullable fields is prohibited
 -------------------------------------------------------------------------------
 space = box.schema.space.create('zcurve_nullable', { engine = 'memtx' })
