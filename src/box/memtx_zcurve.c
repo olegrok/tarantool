@@ -175,6 +175,13 @@ decode_uint(const char **mp)
 }
 
 static uint64_t
+decode_double(const char **mp)
+{
+	double value = mp_decode_double(mp);
+	return toggle_high_bit(value);
+}
+
+static uint64_t
 decode_number(const char **mp)
 {
 	double value = 0;
@@ -240,6 +247,9 @@ mp_decode_to_uint64(const char **mp, enum field_type type)
 		}
 		case FIELD_TYPE_NUMBER: {
 			return decode_number(mp);
+		}
+		case FIELD_TYPE_DOUBLE: {
+			return decode_double(mp);
 		}
 		case FIELD_TYPE_STRING: {
 			return decode_str(mp);

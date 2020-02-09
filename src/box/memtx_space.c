@@ -722,6 +722,7 @@ memtx_space_check_index_def(struct space *space, struct index_def *index_def)
 		if (index_def->key_def->parts[0].type != FIELD_TYPE_UNSIGNED &&
 			index_def->key_def->parts[0].type != FIELD_TYPE_STRING &&
 			index_def->key_def->parts[0].type != FIELD_TYPE_INTEGER &&
+			index_def->key_def->parts[0].type != FIELD_TYPE_DOUBLE &&
 			index_def->key_def->parts[0].type != FIELD_TYPE_NUMBER) {
 			diag_set(ClientError, ER_MODIFY_INDEX,
 					 index_def->name, space_name(space),
