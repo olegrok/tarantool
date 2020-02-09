@@ -1,18 +1,25 @@
+#include "memory.h"
+#include "fiber.h"
 #include "unit.h"
 #include "salad/zcurve.h"
 #include "salad/bit_array.h"
 
 static z_address *
-create_key2d_from_number(uint64_t num)
+create_key2d_from_number(struct mempool *pool, uint8_t dim, uint64_t num)
 {
-	z_address *key = bit_array_create(2);
+	z_address *key = bit_array_create(pool, dim);
 	bit_array_clear_all(key);
-	bit_array_add_uint64(key, num);
+	bit_array_add_word(key, num);
 	return key;
 }
 
 void
 next_jump_in_check_2d() {
+	word_size_t dim = 2;
+	struct mempool pool = {};
+	mempool_create(&pool, cord_slab_cache(),
+				   bit_array_bsize(dim));
+
     struct test_case {
         uint64_t test_point;
         uint64_t expected;
@@ -45,29 +52,39 @@ next_jump_in_check_2d() {
 	size_t test_plan = sizeof(test_cases) / sizeof(struct test_case);
 	plan(test_plan);
 
-	z_address *z_lower_bound = create_key2d_from_number(lower_bound);
-	z_address *z_upper_bound = create_key2d_from_number(upper_bound);
-	z_address *result = bit_array_create(2);
+	z_address *z_lower_bound = create_key2d_from_number(&pool, dim,
+			lower_bound);
+	z_address *z_upper_bound = create_key2d_from_number(&pool, dim,
+			upper_bound);
+	z_address *result = bit_array_create(&pool, dim);
 
 	for (size_t i = 0; i < test_plan; ++i) {
-		z_address *value = create_key2d_from_number(test_cases[i].test_point);
-		z_address *expected = create_key2d_from_number(test_cases[i].expected);
+		z_address *value = create_key2d_from_number(&pool, dim,
+				test_cases[i].test_point);
+		z_address *expected = create_key2d_from_number(&pool, dim,
+				test_cases[i].expected);
 		get_next_zvalue(value, z_lower_bound, z_upper_bound, result);
 		is(bit_array_cmp(result, expected), 0, "%" PRIu64 " -> %" PRIu64,
 				test_cases[i].test_point, test_cases[i].expected);
-		bit_array_free(value);
-		bit_array_free(expected);
+		bit_array_free(&pool, value);
+		bit_array_free(&pool, expected);
 	}
 
-	bit_array_free(result);
-	bit_array_free(z_lower_bound);
-	bit_array_free(z_upper_bound);
+	bit_array_free(&pool, result);
+	bit_array_free(&pool, z_lower_bound);
+	bit_array_free(&pool, z_upper_bound);
+	mempool_destroy(&pool);
 	footer();
     check_plan();
 }
 
 void
 is_relevant_check_2d() {
+	word_size_t dim = 2;
+	struct mempool pool = {};
+	mempool_create(&pool, cord_slab_cache(),
+				   bit_array_bsize(dim));
+
     size_t test_plan = 14;
     header();
     plan(test_plan);
@@ -96,25 +113,41 @@ is_relevant_check_2d() {
             { 52, false },
     };
 
-    z_address *z_lower_bound = create_key2d_from_number(lower_bound);
-    z_address *z_upper_bound = create_key2d_from_number(upper_bound);
+    z_address *z_lower_bound = create_key2d_from_number(&pool, dim,
+    		lower_bound);
+    z_address *z_upper_bound = create_key2d_from_number(&pool, dim,
+    		upper_bound);
 
     for (size_t i = 0; i < test_plan; ++i) {
-        z_address *value = create_key2d_from_number(test_cases[i].test_point);
+        z_address *value = create_key2d_from_number(&pool, dim,
+        		test_cases[i].test_point);
         bool is_relevant = z_value_is_relevant(value, z_lower_bound,
                 z_upper_bound);
         is(is_relevant, test_cases[i].expected,
                 is_relevant ? "in query box" : "not in query box");
-        bit_array_free(value);
+        bit_array_free(&pool, value);
     }
 
-    bit_array_free(z_lower_bound);
-    bit_array_free(z_upper_bound);
+    bit_array_free(&pool, z_lower_bound);
+    bit_array_free(&pool, z_upper_bound);
+	mempool_destroy(&pool);
     footer();
     check_plan();
 }
 
+static void
+zcurve_C_test_init(size_t cache_size)
+{
+	/* Suppress info messages. */
+	say_set_log_level(S_WARN);
+
+	memory_init();
+	fiber_init(fiber_c_invoke);
+}
+
 int main() {
+	zcurve_C_test_init(1LLU * 1024LLU * 1024LLU * 1024LLU);
+
 	next_jump_in_check_2d();
     is_relevant_check_2d();
 	return 0;
