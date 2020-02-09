@@ -389,6 +389,38 @@ pk = nil
 sk = nil
 
 -------------------------------------------------------------------------------
+-- multi-part non-unique (number + integer + double) with negative
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('number_integer_double', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+parts = {{2, 'number'}, {3, 'integer'}, {4, 'double'}}
+sk = space:create_index('secondary', { type = 'zcurve', parts = parts, unique = false})
+
+key = 0
+
+for i = -2, 2, 1 do \
+    for j = -2, 2, 1 do \
+        for k = -2, 2, 1 do \
+            space:insert{key, i, j, ffi.cast('double', k)} \
+            key = key + 1 \
+        end \
+    end \
+end
+
+sk:select({-1, 1, -1, 1, ffi.cast('double', -1), ffi.cast('double', 1)})
+sk:select({1, 1, ffi.cast('double', 1)}, 'EQ')
+sk:select({0.99999999, 1, ffi.cast('double', 0.99999999)}, 'EQ')
+sk:select({0.99999999, 1, ffi.cast('double', 0.99999999)}, 'GE')
+
+space:drop()
+space = nil
+parts = nil
+pk = nil
+sk = nil
+key = 0
+
+-------------------------------------------------------------------------------
 -- nullable fields is prohibited
 -------------------------------------------------------------------------------
 space = box.schema.space.create('zcurve_nullable', { engine = 'memtx' })
