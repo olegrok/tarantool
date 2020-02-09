@@ -10,38 +10,37 @@
 #define BIT_COUNT 8
 
 inline size_t
-bit_array_bsize(word_addr_t num_of_words)
+bit_array_bsize(word_size_t num_of_words)
 {
 	assert(num_of_words > 0);
 	return sizeof(bit_array) + num_of_words * sizeof(word_t);
 }
 
 bit_array *
-bit_array_create(word_addr_t num_of_words)
+bit_array_create(struct mempool *pool, word_size_t num_of_words)
 {
-	size_t size = bit_array_bsize(num_of_words);
-
-	bit_array *bitarr = (bit_array *)calloc(1, size);
+	bit_array *bitarr = (bit_array *)mempool_alloc(pool);
 	if (bitarr == NULL) {
 		return NULL;
 	}
 
 	bitarr->words = (void*)(bitarr + 1);
 	bitarr->num_of_words = num_of_words;
+	bit_array_clear_all(bitarr);
 	return bitarr;
 }
 
 inline void
-bit_array_free(bit_array *array)
+bit_array_free(struct mempool *pool, bit_array *array)
 {
-	free(array);
+	mempool_free(pool, array);
 }
 
 void
 bit_array_add(bit_array *src, const bit_array *add)
 {
 	assert(src->num_of_words == add->num_of_words);
-	word_addr_t num_of_words = src->num_of_words;
+	word_size_t num_of_words = src->num_of_words;
 
 	char carry = 0;
 	word_t word1, word2;
@@ -56,13 +55,13 @@ bit_array_add(bit_array *src, const bit_array *add)
 }
 
 void
-bit_array_add_uint64(bit_array *bitarr, uint64_t value)
+bit_array_add_word(bit_array *bitarr, word_t value)
 {
 	if(value == 0) {
 		return;
 	}
 
-	for(word_addr_t i = 0; i < bitarr->num_of_words; i++) {
+	for(word_size_t i = 0; i < bitarr->num_of_words; i++) {
 		if(WORD_MAX - bitarr->words[i] < value) {
 			bitarr->words[i] += value;
 			value = 1;
@@ -76,9 +75,9 @@ bit_array_add_uint64(bit_array *bitarr, uint64_t value)
 
 static inline int
 bit_array_cmp_internal(const word_t *restrict left, const word_t *restrict right,
-					   size_t num)
+					   word_size_t num)
 {
-	for(word_addr_t i = num - 1;; i--)
+	for(word_size_t i = num - 1;; i--)
 	{
 		if (left[i] != right[i])
 			return (left[i] > right[i] ? 1 : -1);
@@ -93,7 +92,7 @@ bit_array_cmp(const bit_array *left, const bit_array *right)
 {
 	assert(left->num_of_words == right->num_of_words);
 
-	word_addr_t num_of_words = left->num_of_words;
+	word_size_t num_of_words = left->num_of_words;
 	return bit_array_cmp_internal(left->words, right->words, num_of_words);
 }
 
@@ -108,7 +107,6 @@ bit_array_clear_all(bit_array *bitarr)
 {
 	memset(bitarr->words, 0, bitarr->num_of_words * sizeof(word_t));
 }
-
 
 bit_index_t
 bit_array_length(const bit_array *bit_arr)
@@ -126,9 +124,9 @@ bit_array_copy(bit_array *restrict dst, const bit_array *restrict src)
 }
 
 bit_array *
-bit_array_clone(const bit_array *src)
+bit_array_clone(struct mempool *pool, const bit_array *src)
 {
-	bit_array *dst = bit_array_create(src->num_of_words);
+	bit_array *dst = bit_array_create(pool, src->num_of_words);
 
 	if (dst == NULL) {
 		return NULL;
@@ -165,7 +163,7 @@ bit_array_shift_left(bit_array *bitarr, bit_index_t shift_dist)
 	}
 
 	if (offset)
-		memset(bitarr->words, 0, offset * sizeof(uint64_t));
+		memset(bitarr->words, 0, offset * sizeof(word_t));
 }
 
 static inline void
@@ -198,7 +196,7 @@ bit_array_and(bit_array *restrict dst, const bit_array *restrict src)
 	bit_array_and_internal(dst->words, src->words, num_of_words);
 }
 
-uint64_t
+word_t
 bit_array_get_word(const bit_array *bitarr, bit_index_t num)
 {
 	assert(num < bitarr->num_of_words);
@@ -220,7 +218,8 @@ fill_table(bit_array **table, size_t dim, uint8_t shift)
 }
 
 static void
-bit_array_interleave_free_dim_lookup_table(bit_array **table)
+bit_array_interleave_free_dim_lookup_table(struct mempool *pool,
+										   bit_array **table)
 {
 	if (table == NULL) {
 		return;
@@ -228,7 +227,7 @@ bit_array_interleave_free_dim_lookup_table(bit_array **table)
 
 	for (size_t i = 0; i < LOOKUP_TABLE_SIZE; i++) {
 		if (table[i] != NULL) {
-			bit_array_free(table[i]);
+			bit_array_free(pool, table[i]);
 			table[i] = NULL;
 		}
 	}
@@ -236,7 +235,7 @@ bit_array_interleave_free_dim_lookup_table(bit_array **table)
 }
 
 struct bit_array_interleave_lookup_table *
-bit_array_interleave_new_lookup_tables(size_t dim)
+bit_array_interleave_new_lookup_tables(struct mempool *pool, size_t dim)
 {
 	assert(dim > 0);
 	/* Allocate memory for structure */
@@ -247,9 +246,10 @@ bit_array_interleave_new_lookup_tables(size_t dim)
 		return NULL;
 	}
 	table->dim = dim;
+	table->pool = pool;
 
 	/* Allocate memory for buffer */
-	table->buffer = bit_array_create(dim);
+	table->buffer = bit_array_create(pool, dim);
 	if (table->buffer == NULL) {
 		free(table);
 		return NULL;
@@ -271,7 +271,7 @@ bit_array_interleave_new_lookup_tables(size_t dim)
 		}
 
 		for (size_t j = 0; j < LOOKUP_TABLE_SIZE; j++) {
-			table->tables[i][j] = bit_array_create(dim);
+			table->tables[i][j] = bit_array_create(pool, dim);
 			if (table->tables[i] == NULL) {
 				bit_array_interleave_free_lookup_tables(table);
 				return NULL;
@@ -291,7 +291,8 @@ bit_array_interleave_free_lookup_tables(
 
 	if (table->tables != NULL) {
 		for (size_t i = 0; i < table->dim; i++) {
-			bit_array_interleave_free_dim_lookup_table(table->tables[i]);
+			bit_array_interleave_free_dim_lookup_table(table->pool,
+													   table->tables[i]);
 			table->tables[i] = NULL;
 		}
 
@@ -300,7 +301,7 @@ bit_array_interleave_free_lookup_tables(
 	}
 
 	if (table->buffer != NULL) {
-		free(table->buffer);
+		mempool_free(table->pool, table->buffer);
 		table->buffer = NULL;
 	}
 

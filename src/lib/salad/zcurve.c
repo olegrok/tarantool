@@ -3,17 +3,17 @@
 #define KEY_SIZE_IN_BITS (64ULL)
 
 z_address*
-zeros(uint32_t part_count)
+zeros(struct mempool *pool, uint32_t part_count)
 {
-	z_address *result = bit_array_create(part_count);
+	z_address *result = bit_array_create(pool, part_count);
 	bit_array_clear_all(result);
 	return result;
 }
 
 z_address*
-ones(uint32_t part_count)
+ones(struct mempool *pool, uint32_t part_count)
 {
-	z_address *result = bit_array_create(part_count);
+	z_address *result = bit_array_create(pool, part_count);
 	bit_array_set_all(result);
 	return result;
 }

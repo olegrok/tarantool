@@ -127,6 +127,7 @@ struct memtx_zcurve_index {
 	size_t build_array_size, build_array_alloc_size;
 	struct key_def *pk_def;
 	struct bit_array_interleave_lookup_table *lookup_tables;
+	struct mempool bit_array_pool;
 };
 
 /* {{{ Utilities. *************************************************/
@@ -260,8 +261,9 @@ mp_decode_to_uint64(const char **mp, enum field_type type)
 }
 
 static z_address*
-mp_decode_part(const char *mp, uint32_t part_count,
-			   const struct memtx_zcurve_index *index, uint32_t even)
+mp_decode_part(struct mempool *pool, const char *mp,
+		uint32_t part_count, const struct memtx_zcurve_index *index,
+				uint32_t even)
 {
 	const uint32_t size = part_count / 2;
 	uint64_t key_parts[size];
@@ -284,7 +286,7 @@ mp_decode_part(const char *mp, uint32_t part_count,
 		}
 	}
 
-	z_address *result = z_value_create(size);
+	z_address *result = z_value_create(pool, size);
 	if (result == NULL) {
 		return NULL;
 	}
@@ -293,15 +295,15 @@ mp_decode_part(const char *mp, uint32_t part_count,
 }
 
 static z_address*
-mp_decode_key(const char *mp, uint32_t part_count,
-		const struct memtx_zcurve_index *index)
+mp_decode_key(struct mempool *pool,const char *mp,
+		uint32_t part_count, const struct memtx_zcurve_index *index)
 {
 	uint64_t key_parts[part_count];
 	enum field_type type = index->base.def->key_def->parts->type;
 	for (uint32_t i = 0; i < part_count; ++i) {
 		key_parts[i] = mp_decode_to_uint64(&mp, type);
 	}
-	z_address *result = z_value_create(part_count);
+	z_address *result = z_value_create(pool, part_count);
 	if (result == NULL) {
 		return NULL;
 	}
@@ -311,15 +313,15 @@ mp_decode_key(const char *mp, uint32_t part_count,
 
 /* Extract z-address from tuple */
 static z_address*
-extract_zaddress(struct tuple *tuple,
-		const struct memtx_zcurve_index *index)
+extract_zaddress(struct tuple *tuple, struct mempool *pool,
+				 const struct memtx_zcurve_index *index)
 {
 	uint32_t key_size;
 	struct key_def *key_def = index->base.def->key_def;
 	const char* key = tuple_extract_key(tuple, key_def,
 			MULTIKEY_NONE, &key_size);
 	mp_decode_array(&key);
-	return mp_decode_key(key, key_def->part_count, index);
+	return mp_decode_key(pool, key, key_def->part_count, index);
 }
 
 /* {{{ MemtxTree Iterators ****************************************/
@@ -352,21 +354,23 @@ static void
 tree_iterator_free(struct iterator *iterator)
 {
 	struct tree_iterator *it = tree_iterator(iterator);
+	struct memtx_zcurve_index *index =
+			(struct memtx_zcurve_index *)iterator->index;
 	struct tuple *tuple = it->current.tuple;
 	if (it->lower_bound != NULL) {
-		z_value_free(it->lower_bound);
+		z_value_free(&index->bit_array_pool, it->lower_bound);
 		it->lower_bound = NULL;
 	}
 	if (it->upper_bound != NULL) {
-		z_value_free(it->upper_bound);
+		z_value_free(&index->bit_array_pool, it->upper_bound);
 		it->upper_bound = NULL;
 	}
 	if (it->previous_key != NULL) {
-		z_value_free(it->previous_key);
+		z_value_free(&index->bit_array_pool, it->previous_key);
 		it->previous_key = NULL;
 	}
 	if (it->next_zvalue != NULL) {
-		z_value_free(it->next_zvalue);
+		z_value_free(&index->bit_array_pool, it->next_zvalue);
 		it->next_zvalue = NULL;
 	}
 	if (tuple != NULL) {
@@ -422,7 +426,8 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 
 	if (key_is_changed) {
 		if (it->previous_key == NULL)
-			it->previous_key = z_value_create(res->z_address->num_of_words);
+			it->previous_key = z_value_create(&index->bit_array_pool,
+					res->z_address->num_of_words);
 		bit_array_copy(it->previous_key, res->z_address);
 	}
 
@@ -546,13 +551,14 @@ static void
 memtx_zcurve_index_free(struct memtx_zcurve_index *index)
 {
 	for (size_t i = 0; i < index->build_array_size; i++) {
-		z_value_free(index->build_array[i].z_address);
+		z_value_free(&index->bit_array_pool, index->build_array[i].z_address);
 	}
 	free(index->build_array);
 	memtx_zcurve_destroy(&index->tree);
 
 	key_def_delete(index->pk_def);
 	bit_array_interleave_free_lookup_tables(index->lookup_tables);
+	mempool_destroy(&index->bit_array_pool);
 	free(index);
 }
 
@@ -633,7 +639,8 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 	if (new_tuple) {
 		struct memtx_zcurve_data new_data;
 		new_data.tuple = new_tuple;
-		new_data.z_address = extract_zaddress(new_tuple, index);
+		new_data.z_address = extract_zaddress(new_tuple,
+				&index->bit_array_pool, index);
 		struct memtx_zcurve_data dup_data;
 		dup_data.tuple = NULL;
 		dup_data.z_address = NULL;
@@ -649,17 +656,18 @@ memtx_zcurve_index_replace(struct index *base, struct tuple *old_tuple,
 
 		if (dup_data.tuple != NULL) {
 			*result = dup_data.tuple;
-			z_value_free(dup_data.z_address);
+			z_value_free(&index->bit_array_pool, dup_data.z_address);
 			return 0;
 		}
 	}
 	if (old_tuple) {
 		struct memtx_zcurve_data old_data, deleted_value;
 		old_data.tuple = old_tuple;
-		old_data.z_address = extract_zaddress(old_tuple, index);
+		old_data.z_address = extract_zaddress(old_tuple,
+				&index->bit_array_pool, index);
 		memtx_zcurve_delete_value(&index->tree, old_data, &deleted_value);
-		z_value_free(old_data.z_address);
-		z_value_free(deleted_value.z_address);
+		z_value_free(&index->bit_array_pool, old_data.z_address);
+		z_value_free(&index->bit_array_pool, deleted_value.z_address);
 	}
 	*result = old_tuple;
 	return 0;
@@ -712,17 +720,24 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
 	it->previous_key = NULL;
-	it->next_zvalue = z_value_create(key_def_part_count);
+	it->next_zvalue = z_value_create(
+			&index->bit_array_pool, key_def_part_count);
 
 	if (part_count == 0 || type == ITER_ALL) {
-		it->lower_bound = zeros(key_def_part_count);
-		it->upper_bound = ones(key_def_part_count);
+		it->lower_bound = zeros(&index->bit_array_pool,
+				key_def_part_count);
+		it->upper_bound = ones(&index->bit_array_pool,
+				key_def_part_count);
 	} else if (base->def->key_def->part_count == part_count) {
-		it->lower_bound = mp_decode_key(key, key_def_part_count, index);
-		it->upper_bound = ones(key_def_part_count);
+		it->lower_bound = mp_decode_key(&index->bit_array_pool,
+				key, key_def_part_count, index);
+		it->upper_bound = ones(&index->bit_array_pool,
+				key_def_part_count);
 	} else if (base->def->key_def->part_count * 2 == part_count) {
-		it->lower_bound = mp_decode_part(key, part_count, index, 0);
-		it->upper_bound = mp_decode_part(key, part_count, index, 1);
+		it->lower_bound = mp_decode_part(&index->bit_array_pool,
+				key, part_count, index, 0);
+		it->upper_bound = mp_decode_part(&index->bit_array_pool,
+				key, part_count, index, 1);
 	} else {
 		unreachable();
 	}
@@ -789,7 +804,8 @@ memtx_zcurve_index_build_next(struct index *base, struct tuple *tuple)
 	struct memtx_zcurve_data *elem =
 		&index->build_array[index->build_array_size++];
 	elem->tuple = tuple;
-	elem->z_address = extract_zaddress(tuple, index);
+	elem->z_address = extract_zaddress(tuple, &index->bit_array_pool,
+			index);
 	return 0;
 }
 
@@ -938,8 +954,22 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	struct key_def *pk_def = key_def_cut_first(base_def->cmp_def,
 											   part_count,
 											   &fiber()->gc);
+	if (pk_def == NULL) {
+		free(index);
+		return NULL;
+	}
+
+	mempool_create(&index->bit_array_pool, cord_slab_cache(),
+				   bit_array_bsize(part_count));
+
 	index->pk_def = pk_def;
-	index->lookup_tables = bit_array_interleave_new_lookup_tables(part_count);
+	index->lookup_tables = bit_array_interleave_new_lookup_tables(
+			&index->bit_array_pool, part_count);
+	if (index->lookup_tables == NULL) {
+		free(index);
+		return NULL;
+	}
+
 	memtx_zcurve_create(&index->tree, index->pk_def, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);
 	return &index->base;

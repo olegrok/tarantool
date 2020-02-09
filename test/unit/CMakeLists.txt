@@ -72,7 +72,7 @@ target_link_libraries(decimal.test core unit)
 add_executable(mp_error.test mp_error.cc)
 target_link_libraries(mp_error.test box_error core unit)
 add_executable(zcurve.test zcurve.cc)
-target_link_libraries(zcurve.test salad unit)
+target_link_libraries(zcurve.test salad small core unit)
 
 add_executable(fiber.test fiber.cc)
 set_source_files_properties(fiber.cc PROPERTIES COMPILE_FLAGS -O0)
