@@ -1,3 +1,4 @@
+ffi = require('ffi')
 -------------------------------------------------------------------------------
 -- can't be unique
 -------------------------------------------------------------------------------
@@ -87,6 +88,14 @@ space:replace({7, 2})
 space:replace({8, 2})
 space:replace({9, 3})
 space:replace({10, -3})
+space:replace({11, ffi.cast('double', 3.5)})
+space:replace({12, ffi.cast('double', -3.5)})
+space:replace({13, ffi.cast('float', 3.51)})
+space:replace({14, ffi.cast('float', -3.51)})
+space:replace({15, -0.475})
+space:replace({16, 0.475})
+space:replace({17, 6})
+space:replace({18, -6})
 
 sk:select{}
 sk:select{0, 5}
@@ -171,6 +180,29 @@ for i=1,9 do space:replace{i, i} end
 sk:select({3, 5}, { iterator = 'ALL' })
 sk:select({3, 5}, { iterator = 'EQ' })
 sk:select({3, 5}, { iterator = 'GE' })
+
+space:drop()
+space = nil
+pk = nil
+sk = nil
+
+-------------------------------------------------------------------------------
+-- single-part (double) range query
+-------------------------------------------------------------------------------
+
+space = box.schema.space.create('uint', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+sk = space:create_index('secondary', { type = 'zcurve', parts = {{2, 'double'}}})
+
+for i=0, 5 do \
+    space:replace{i, ffi.cast('double', i)} \
+    space:replace{(2 * i + 6), ffi.cast('double', -i)} \
+end
+
+sk:select()
+sk:select({ffi.cast('double', -3), ffi.cast('double', 3)}, { iterator = 'ALL' })
+sk:select({ffi.cast('double', -3), ffi.cast('double', 3)}, { iterator = 'EQ' })
+sk:select({ffi.cast('double', -3), ffi.cast('double', 3)}, { iterator = 'GE' })
 
 space:drop()
 space = nil
