@@ -421,6 +421,19 @@ sk = nil
 key = 0
 
 -------------------------------------------------------------------------------
+-- 20 is max amount of parts
+-------------------------------------------------------------------------------
+space = box.schema.space.create('zcurve_nullable', { engine = 'memtx' })
+pk = space:create_index('primary', { type = 'tree', parts = {{1, 'unsigned'}}, unique = true})
+parts = {}
+for i = 1, 21 do table.insert(parts, {i, 'number'}) end
+sk = space:create_index('secondary', { type = 'zcurve', parts = parts})
+space:drop()
+pk = nil
+parts = nil
+sk = nil
+
+-------------------------------------------------------------------------------
 -- nullable fields is prohibited
 -------------------------------------------------------------------------------
 space = box.schema.space.create('zcurve_nullable', { engine = 'memtx' })
