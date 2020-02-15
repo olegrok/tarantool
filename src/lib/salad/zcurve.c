@@ -1,6 +1,7 @@
 #include "zcurve.h"
 
 const uint8_t KEY_SIZE_IN_BITS = 64;
+const uint8_t IS_RELEVANT_MASK_MAXLEN = 32;
 
 z_address *
 zeros(struct mempool *pool, uint8_t part_count)
@@ -41,9 +42,11 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 		const z_address *upper_bound)
 {
 	const uint8_t index_dim = bit_array_num_of_words(z_value);
+	assert(IS_RELEVANT_MASK_MAXLEN > index_dim);
 
-	uint64_t save_min = 0, save_max = 0;
-	uint64_t is_relevant_mask = (UINT64_MAX >> (KEY_SIZE_IN_BITS - index_dim));
+	uint32_t save_min = 0, save_max = 0;
+	uint32_t is_relevant_mask = (UINT32_MAX >>
+			(IS_RELEVANT_MASK_MAXLEN - index_dim));
 
 	uint16_t bp = bit_array_length(z_value);
 

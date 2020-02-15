@@ -355,7 +355,6 @@ tree_iterator_free(struct iterator *iterator)
 	struct tree_iterator *it = tree_iterator(iterator);
 	struct memtx_zcurve_index *index =
 			(struct memtx_zcurve_index *)iterator->index;
-	struct tuple *tuple = it->current.tuple;
 	if (it->lower_bound != NULL) {
 		z_value_free(&index->bit_array_pool, it->lower_bound);
 		it->lower_bound = NULL;
@@ -368,6 +367,7 @@ tree_iterator_free(struct iterator *iterator)
 		z_value_free(&index->bit_array_pool, it->next_zvalue);
 		it->next_zvalue = NULL;
 	}
+	struct tuple *tuple = it->current.tuple;
 	if (tuple != NULL) {
 		tuple_unref(tuple);
 	}
