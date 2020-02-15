@@ -21,10 +21,10 @@ extern "C" {
 #endif /* defined(__cplusplus) */
 
 z_address*
-zeros(struct mempool *pool, uint32_t part_count);
+zeros(struct mempool *pool, uint8_t part_count);
 
 z_address*
-ones(struct mempool *pool, uint32_t part_count);
+ones(struct mempool *pool, uint8_t part_count);
 
 void
 get_next_zvalue(const z_address *z_value, const z_address *lower_bound,

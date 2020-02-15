@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <string.h>
 
-#define WORD_MAX  (~0ULL)
+#define WORD_MAX  UINT64_MAX
 #define WORD_SIZE 64ULL
 #define LOOKUP_TABLE_SIZE 256
 #define BIT_COUNT 8
