@@ -71,7 +71,7 @@ add_executable(decimal.test decimal.c)
 target_link_libraries(decimal.test core unit)
 add_executable(mp_error.test mp_error.cc)
 target_link_libraries(mp_error.test box_error core unit)
-add_executable(zcurve.test zcurve.cc)
+add_executable(zcurve.test zcurve.c)
 target_link_libraries(zcurve.test salad small core unit)
 
 add_executable(fiber.test fiber.cc)

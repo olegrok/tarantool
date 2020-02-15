@@ -28,7 +28,7 @@ next_jump_in_check_2d() {
 	header();
 	uint64_t lower_bound = 11;
 	uint64_t upper_bound = 50;
-	struct test_case test_cases[] {
+	struct test_case test_cases[] = {
 			{ 11, 11 },
 			{ 12, 14 },
 			{ 13, 14 },
@@ -96,7 +96,7 @@ is_relevant_check_2d() {
 
     uint64_t lower_bound = 4;
     uint64_t upper_bound = 51;
-    struct test_case test_cases[] {
+    struct test_case test_cases[] = {
             { 0, false },
             { 4, true },
             { 7, true },
