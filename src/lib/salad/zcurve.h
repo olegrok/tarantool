@@ -16,10 +16,6 @@ enum {
 	ZCURVE_MAX_DIMENSION = 20
 };
 
-#if defined(__cplusplus)
-extern "C" {
-#endif /* defined(__cplusplus) */
-
 z_address*
 zeros(struct mempool *pool, uint8_t part_count);
 
@@ -38,9 +34,5 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 bool
 z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 		const z_address *upper_bound);
-
-#if defined(__cplusplus)
-} /* extern "C" { */
-#endif /* defined(__cplusplus) */
 
 #endif //TARANTOOL_ZCURVE_H

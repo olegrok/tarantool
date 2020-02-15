@@ -69,7 +69,7 @@ add_executable(xrow.test xrow.cc)
 target_link_libraries(xrow.test xrow unit)
 add_executable(decimal.test decimal.c)
 target_link_libraries(decimal.test core unit)
-add_executable(zcurve.test zcurve.cc)
+add_executable(zcurve.test zcurve.c)
 target_link_libraries(zcurve.test salad small core unit)
 
 add_executable(fiber.test fiber.cc)
