@@ -61,7 +61,7 @@ struct memtx_zcurve_data {
  * @retval false - Otherwise.
  */
 static bool
-memtx_zcurve_data_identical(const struct memtx_zcurve_data *a,
+memtx_zcurve_data_is_equal(const struct memtx_zcurve_data *a,
 			  const struct memtx_zcurve_data *b)
 {
 	return a->tuple == b->tuple;
@@ -103,7 +103,7 @@ memtx_zcurve_elem_compare(const void *a, const void *b, void *c)
 #define BPS_TREE_EXTENT_SIZE MEMTX_EXTENT_SIZE
 #define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b, arg)
 #define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b)
-#define BPS_TREE_IS_IDENTICAL(a, b) memtx_zcurve_data_identical(&a, &b)
+#define BPS_TREE_IS_IDENTICAL(a, b) memtx_zcurve_data_is_equal(&a, &b)
 #define bps_tree_elem_t struct memtx_zcurve_data
 #define bps_tree_key_t z_address *
 #define bps_tree_arg_t struct key_def *
@@ -333,7 +333,6 @@ struct tree_iterator {
 
 	z_address *lower_bound;
 	z_address *upper_bound;
-	z_address *previous_key;
 	z_address *next_zvalue;
 
 	/** Memory pool the iterator was allocated from. */
@@ -365,10 +364,6 @@ tree_iterator_free(struct iterator *iterator)
 		z_value_free(&index->bit_array_pool, it->upper_bound);
 		it->upper_bound = NULL;
 	}
-	if (it->previous_key != NULL) {
-		z_value_free(&index->bit_array_pool, it->previous_key);
-		it->previous_key = NULL;
-	}
 	if (it->next_zvalue != NULL) {
 		z_value_free(&index->bit_array_pool, it->next_zvalue);
 		it->next_zvalue = NULL;
@@ -396,14 +391,7 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 			memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 
 	bool is_relevant = false;
-	bool key_is_changed = true;
-	if (it->previous_key != NULL && res != NULL &&
-		z_value_cmp(it->previous_key, res->z_address) == 0) {
-		is_relevant = true;
-		key_is_changed = false;
-	}
-
-	while (!is_relevant) {
+	do {
 		if (res == NULL) {
 			goto out;
 		}
@@ -422,14 +410,7 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 		it->tree_iterator = memtx_zcurve_lower_bound(&index->tree,
 				it->next_zvalue, &is_relevant);
 		res = memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
-	}
-
-	if (key_is_changed) {
-		if (it->previous_key == NULL)
-			it->previous_key = z_value_create(&index->bit_array_pool,
-					res->z_address->num_of_words);
-		bit_array_copy(it->previous_key, res->z_address);
-	}
+	} while (!is_relevant);
 
 	*ret = res->tuple;
 	tuple_ref(*ret);
@@ -451,7 +432,7 @@ tree_iterator_next(struct iterator *iterator, struct tuple **ret)
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
 			memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
-	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
+	if (check == NULL || !memtx_zcurve_data_is_equal(check, &it->current)) {
 		it->tree_iterator =
 				memtx_zcurve_upper_bound_elem(&index->tree, it->current,
 											NULL);
@@ -472,7 +453,7 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	assert(it->current.tuple != NULL && it->current.z_address != NULL);
 	struct memtx_zcurve_data *check =
 		memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
-	if (check == NULL || !memtx_zcurve_data_identical(check, &it->current)) {
+	if (check == NULL || !memtx_zcurve_data_is_equal(check, &it->current)) {
 		it->tree_iterator =
 			memtx_zcurve_upper_bound_elem(&index->tree,
 					it->current, NULL);
@@ -719,7 +700,6 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->type = type;
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
-	it->previous_key = NULL;
 	it->next_zvalue = z_value_create(
 			&index->bit_array_pool, key_def_part_count);
 
