@@ -37,24 +37,6 @@ bit_array_free(struct mempool *pool, bit_array *array)
 }
 
 void
-bit_array_add(bit_array *src, const bit_array *add)
-{
-	assert(src->num_of_words == add->num_of_words);
-	word_size_t num_of_words = src->num_of_words;
-
-	char carry = 0;
-	word_t word1, word2;
-
-	for(size_t i = 0; i < num_of_words; i++) {
-		word1 = src->words[i];
-		word2 = add->words[i];
-
-		src->words[i] = word1 + word2 + carry;
-		carry = WORD_MAX - word1 < word2 || WORD_MAX - word1 - word2 < (word_t)carry;
-	}
-}
-
-void
 bit_array_add_word(bit_array *bitarr, word_t value)
 {
 	if(value == 0) {
@@ -123,18 +105,6 @@ bit_array_copy(bit_array *restrict dst, const bit_array *restrict src)
 	return dst;
 }
 
-bit_array *
-bit_array_clone(struct mempool *pool, const bit_array *src)
-{
-	bit_array *dst = bit_array_create(pool, src->num_of_words);
-
-	if (dst == NULL) {
-		return NULL;
-	}
-
-	return bit_array_copy(dst, src);
-}
-
 void
 bit_array_shift_left(bit_array *bitarr, bit_index_t shift_dist)
 {
@@ -186,21 +156,6 @@ bit_array_and_internal(word_t *restrict dst, const word_t *restrict src, size_t 
 {
 	for(size_t i = 0; i < num; i++)
 		dst[i] &= src[i];
-}
-
-void
-bit_array_and(bit_array *restrict dst, const bit_array *restrict src)
-{
-	assert(dst->num_of_words == src->num_of_words);
-	size_t num_of_words = dst->num_of_words;
-	bit_array_and_internal(dst->words, src->words, num_of_words);
-}
-
-word_t
-bit_array_get_word(const bit_array *bitarr, bit_index_t num)
-{
-	assert(num < bitarr->num_of_words);
-	return bitarr->words[num];
 }
 
 static void
