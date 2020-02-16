@@ -65,7 +65,7 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 			return false;
 		}
 
-		uint8_t save_max_dim_bit = bitset_get(&save_max, dim);
+		const uint8_t save_max_dim_bit = bitset_get(&save_max, dim);
 		if (save_max_dim_bit == 0 && z_value_bp < upper_bound_bp) {
 			bitset_set(&save_max, dim);
 		} else if (save_max_dim_bit == 0 && z_value_bp > upper_bound_bp) {
@@ -88,9 +88,9 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 	const uint8_t index_dim = bit_array_num_of_words(z_value);
 
 	int8_t flag[index_dim], out_step[index_dim];
-	int32_t save_min[index_dim], save_max[index_dim];
+	int16_t save_min[index_dim], save_max[index_dim];
 
-	for (uint32_t i = 0; i < index_dim; ++i) {
+	for (uint8_t i = 0; i < index_dim; ++i) {
 		flag[i] = 0;
 		out_step[i] = INT8_MIN;
 		save_min[i] = -1;
@@ -100,12 +100,12 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 	uint16_t bp = key_len;
 	do {
 		bp--;
-		uint32_t dim = get_dim(index_dim, bp);
-		uint8_t step = get_step(index_dim, bp);
+		const uint8_t dim = get_dim(index_dim, bp);
+		const uint8_t step = get_step(index_dim, bp);
 
-		char z_value_bp = bit_array_get(z_value, bp);
-		char lower_bound_bp = bit_array_get(lower_bound, bp);
-		char upper_bound_bp = bit_array_get(upper_bound, bp);
+		const uint8_t z_value_bp = bit_array_get(z_value, bp);
+		const uint8_t lower_bound_bp = bit_array_get(lower_bound, bp);
+		const uint8_t upper_bound_bp = bit_array_get(upper_bound, bp);
 
 		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
@@ -130,7 +130,14 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 		}
 	} while (bp > 0);
 
-	/* Next intersection point */
+#ifndef NDEBUG
+	/*
+	 * Next intersection point check.
+	 * For performance reasons this check is
+	 * excluded in not debug mode as
+	 * this function should be called
+	 * if "is_relevant" condition is false.
+	 * */
 	bool is_nip = true;
 	for (uint8_t dim = 0; dim < index_dim; ++dim) {
 		if (flag[dim] != 0) {
@@ -142,6 +149,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 	if (is_nip) {
 		return;
 	}
+#endif
 
 	uint8_t max_dim = 0;
 	int8_t max_out_step = -1;
@@ -179,7 +187,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 				 * bit position < max_bp to 0 because nip would not surely get below
 				 * the lower_bound
 				 */
-				for (uint16_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
+				for (uint16_t bit_pos = dim; bit_pos + 1 < index_dim * KEY_SIZE_IN_BITS;
 					 bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
 						break;
