@@ -13,7 +13,7 @@ create_key2d_from_number(struct mempool *pool, uint8_t dim, uint64_t num)
 	return key;
 }
 
-void
+static void
 next_jump_in_check_2d() {
 	word_size_t dim = 2;
 	struct mempool pool = {};
@@ -29,25 +29,32 @@ next_jump_in_check_2d() {
 	uint64_t lower_bound = 11;
 	uint64_t upper_bound = 50;
 	struct test_case test_cases[] = {
-			{ 11, 11 },
 			{ 12, 14 },
 			{ 13, 14 },
-			{ 14, 14 },
 			{ 16, 26 },
 			{ 17, 26 },
 			{ 18, 26 },
 			{ 19, 26 },
 			{ 20, 26 },
 			{ 25, 26 },
-			{ 26, 26 },
 			{ 27, 33 },
 			{ 32, 33 },
-			{ 33, 33 },
 			{ 34, 35 },
-			{ 35, 35 },
 			{ 40, 48 },
 			{ 49, 50 },
+#ifndef NDEBUG
+/*
+ * For performance reasons border points are disabled
+ * in not debug mode.
+ * For details read a comment in get_next_zvalue function.
+ */
+			{ 11, 11 },
+			{ 14, 14 },
+			{ 26, 26 },
+			{ 33, 33 },
+			{ 35, 35 },
 			{ 50, 50 },
+#endif
 	};
 	size_t test_plan = sizeof(test_cases) / sizeof(struct test_case);
 	plan(test_plan);
@@ -78,7 +85,7 @@ next_jump_in_check_2d() {
     check_plan();
 }
 
-void
+static void
 is_relevant_check_2d() {
 	word_size_t dim = 2;
 	struct mempool pool = {};

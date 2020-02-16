@@ -151,13 +151,6 @@ bit_array_or(bit_array *dst, const bit_array *src)
 	bit_array_or_internal(dst->words, src->words, num_of_words);
 }
 
-static inline void
-bit_array_and_internal(word_t *restrict dst, const word_t *restrict src, size_t num)
-{
-	for(size_t i = 0; i < num; i++)
-		dst[i] &= src[i];
-}
-
 static void
 fill_table(bit_array **table, size_t dim, uint8_t shift)
 {
