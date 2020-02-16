@@ -52,24 +52,31 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 
 	do {
 		bp--;
-		uint8_t dim = get_dim(index_dim, bp);
+		const bool z_value_bp = bit_array_get(z_value, bp);
+		const bool lower_bound_bp = bit_array_get(lower_bound, bp);
+		const bool upper_bound_bp = bit_array_get(upper_bound, bp);
 
-		const uint8_t z_value_bp = bit_array_get(z_value, bp);
-		const uint8_t lower_bound_bp = bit_array_get(lower_bound, bp);
-		const uint8_t upper_bound_bp = bit_array_get(upper_bound, bp);
+		if (z_value_bp == lower_bound_bp && z_value_bp == upper_bound_bp) {
+			continue;
+		}
+		const uint8_t dim = get_dim(index_dim, bp);
 
-		const uint8_t save_min_dim_bit = bitset_get(&save_min, dim);
-		if (save_min_dim_bit == 0 && z_value_bp > lower_bound_bp) {
-			bitset_set(&save_min, dim);
-		} else if (save_min_dim_bit == 0 && z_value_bp < lower_bound_bp) {
-			return false;
+		if (z_value_bp != lower_bound_bp) {
+			const bool save_min_dim_bit = bitset_get(&save_min, dim);
+			if (z_value_bp > lower_bound_bp && save_min_dim_bit == 0) {
+				save_min |= (1u << dim);
+			} else if (z_value_bp < lower_bound_bp && save_min_dim_bit == 0) {
+				return false;
+			}
 		}
 
-		const uint8_t save_max_dim_bit = bitset_get(&save_max, dim);
-		if (save_max_dim_bit == 0 && z_value_bp < upper_bound_bp) {
-			bitset_set(&save_max, dim);
-		} else if (save_max_dim_bit == 0 && z_value_bp > upper_bound_bp) {
-			return false;
+		if (z_value_bp != upper_bound_bp) {
+			const bool save_max_dim_bit = bitset_get(&save_max, dim);
+			if (z_value_bp < upper_bound_bp && save_max_dim_bit == 0) {
+				save_max |= (1u << dim);
+			} else if (z_value_bp > upper_bound_bp && save_max_dim_bit == 0) {
+				return false;
+			}
 		}
 
 		if (save_max == is_relevant_mask && save_min == is_relevant_mask) {
@@ -100,12 +107,17 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 	uint16_t bp = key_len;
 	do {
 		bp--;
+
+		const bool z_value_bp = bit_array_get(z_value, bp);
+		const bool lower_bound_bp = bit_array_get(lower_bound, bp);
+		const bool upper_bound_bp = bit_array_get(upper_bound, bp);
+
+		if (z_value_bp == lower_bound_bp && z_value_bp == upper_bound_bp) {
+			continue;
+		}
+
 		const uint8_t dim = get_dim(index_dim, bp);
 		const uint8_t step = get_step(index_dim, bp);
-
-		const uint8_t z_value_bp = bit_array_get(z_value, bp);
-		const uint8_t lower_bound_bp = bit_array_get(lower_bound, bp);
-		const uint8_t upper_bound_bp = bit_array_get(upper_bound, bp);
 
 		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
@@ -179,15 +191,16 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 	}
 
 	for (uint8_t dim = 0; dim < index_dim; ++dim) {
+		const uint16_t length = index_dim * KEY_SIZE_IN_BITS - 1;
 		if (flag[dim] >= 0) {
 			/* nip has not fallen below the minimum in dim */
 			if (max_bp <= bit_position(index_dim, dim, save_min[dim])) {
 				/*
 				 * set all bits in dimension dim with
-				 * bit position < max_bp to 0 because nip would not surely get below
-				 * the lower_bound
+				 * bit position < max_bp to 0 because nip
+				 * would not surely get below the lower_bound
 				 */
-				for (uint16_t bit_pos = dim; bit_pos + 1 < index_dim * KEY_SIZE_IN_BITS;
+				for (uint16_t bit_pos = dim; bit_pos < length;
 					 bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
 						break;
@@ -197,10 +210,10 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 			} else {
 				/*
 				 * set all bits in dimension dim with
-				 * bit position < max_bp to the value of corresponding bits of the
-				 * lower_bound
+				 * bit position < max_bp to the value of
+				 * corresponding bits of the lower_bound
 				 */
-				for (uint16_t bit_pos = dim; bit_pos < index_dim * KEY_SIZE_IN_BITS - 1;
+				for (uint16_t bit_pos = dim; bit_pos < length;
 					 bit_pos += index_dim) {
 					if (bit_pos >= max_bp) {
 						break;
@@ -216,9 +229,8 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 			 * corresponding bits of the lower_bound because the minimum would not
 			 * be exceeded otherwise
 			 */
-			const uint16_t length = index_dim * KEY_SIZE_IN_BITS - 1;
 			for (bp = dim; bp < length; bp += index_dim) {
-				bit_array_assign(out, bp,bit_array_get(lower_bound, bp));
+				bit_array_assign(out, bp, bit_array_get(lower_bound, bp));
 			}
 		}
 	}

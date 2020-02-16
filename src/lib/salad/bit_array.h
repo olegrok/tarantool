@@ -6,13 +6,9 @@
 #include <small/mempool.h>
 
 typedef struct bit_array bit_array;
-typedef uint64_t word_t, bit_index_t;
+typedef uint64_t word_t;
+typedef uint16_t bit_index_t;
 typedef uint8_t word_size_t;
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include "bit_array_macros.h"
 
@@ -90,9 +86,5 @@ bit_array_interleave_free_lookup_tables(
 int
 bit_array_interleave(struct bit_array_interleave_lookup_table *table,
 					 const uint64_t *in, bit_array *out);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif //BIT_ARRAY_H
