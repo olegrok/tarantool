@@ -81,7 +81,7 @@ struct bit_array_interleave_lookup_table {
 };
 
 struct bit_array_interleave_lookup_table *
-bit_array_interleave_new_lookup_tables(struct mempool *pool, size_t dim);
+bit_array_interleave_new_lookup_tables(struct mempool *pool, uint8_t dim);
 
 void
 bit_array_interleave_free_lookup_tables(
