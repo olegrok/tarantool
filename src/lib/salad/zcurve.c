@@ -7,7 +7,7 @@ z_address *
 zeros(struct mempool *pool, uint8_t part_count)
 {
 	z_address *result = bit_array_create(pool, part_count);
-	bit_array_clear_all(result);
+	bit_array_clear_all(result, part_count);
 	return result;
 }
 
@@ -15,7 +15,7 @@ z_address *
 ones(struct mempool *pool, uint8_t part_count)
 {
 	z_address *result = bit_array_create(pool, part_count);
-	bit_array_set_all(result);
+	bit_array_set_all(result, part_count);
 	return result;
 }
 
@@ -39,16 +39,15 @@ get_step(uint8_t index_dim, uint16_t bit_position)
 
 bool
 z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
-		const z_address *upper_bound)
+		const z_address *upper_bound, uint8_t index_dim)
 {
-	const uint8_t index_dim = bit_array_num_of_words(z_value);
 	assert(IS_RELEVANT_MASK_MAXLEN > index_dim);
 
 	uint32_t save_min = 0, save_max = 0;
 	uint32_t is_relevant_mask = (UINT32_MAX >>
 			(IS_RELEVANT_MASK_MAXLEN - index_dim));
 
-	uint16_t bp = bit_array_length(z_value);
+	uint16_t bp = bit_array_length(index_dim);
 
 	do {
 		bp--;
@@ -62,7 +61,7 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 		const uint8_t dim = get_dim(index_dim, bp);
 
 		if (z_value_bp != lower_bound_bp) {
-			const bool save_min_dim_bit = bitset_get(&save_min, dim);
+			const bool save_min_dim_bit = save_min & (1u << dim);
 			if (z_value_bp > lower_bound_bp && save_min_dim_bit == 0) {
 				save_min |= (1u << dim);
 			} else if (z_value_bp < lower_bound_bp && save_min_dim_bit == 0) {
@@ -71,7 +70,7 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 		}
 
 		if (z_value_bp != upper_bound_bp) {
-			const bool save_max_dim_bit = bitset_get(&save_max, dim);
+			const bool save_max_dim_bit = save_max & (1u << dim);
 			if (z_value_bp < upper_bound_bp && save_max_dim_bit == 0) {
 				save_max |= (1u << dim);
 			} else if (z_value_bp > upper_bound_bp && save_max_dim_bit == 0) {
@@ -80,7 +79,7 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 		}
 
 		if (save_max == is_relevant_mask && save_min == is_relevant_mask) {
-			return true;
+			break;
 		}
 	} while (bp > 0);
 	return true;
@@ -88,11 +87,10 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 
 void
 get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
-		const z_address *upper_bound, z_address *out)
+		const z_address *upper_bound, z_address *out, uint8_t index_dim)
 {
-	bit_array_copy(out, z_value);
-	const uint16_t key_len = bit_array_length(z_value);
-	const uint8_t index_dim = bit_array_num_of_words(z_value);
+	bit_array_copy(out, z_value, index_dim);
+	const uint16_t key_len = bit_array_length(index_dim);
 
 	int8_t flag[index_dim], out_step[index_dim];
 	int16_t save_min[index_dim], save_max[index_dim];
@@ -104,6 +102,9 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 		save_max[i] = -1;
 	}
 
+	uint32_t is_relevant_mask = (UINT32_MAX >>
+			(IS_RELEVANT_MASK_MAXLEN - index_dim));
+	uint32_t save_min_mask = 0, save_max_mask = 0;
 	uint16_t bp = key_len;
 	do {
 		bp--;
@@ -121,6 +122,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 
 		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
+				save_min_mask |= (1u << dim);
 				save_min[dim] = step;
 			}
 		} else if (z_value_bp < lower_bound_bp) {
@@ -132,6 +134,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 
 		if (z_value_bp < upper_bound_bp) {
 			if (save_max[dim] == -1) {
+				save_max_mask |= (1u << dim);
 				save_max[dim] = step;
 			}
 		} else if (z_value_bp > upper_bound_bp) {
@@ -139,6 +142,11 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 				out_step[dim] = step;
 				flag[dim] = 1;
 			}
+		}
+
+		if (save_max_mask == is_relevant_mask &&
+			save_min_mask == is_relevant_mask) {
+			break;
 		}
 	} while (bp > 0);
 
