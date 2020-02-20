@@ -8,8 +8,7 @@ static z_address *
 create_key2d_from_number(struct mempool *pool, uint8_t dim, uint64_t num)
 {
 	z_address *key = bit_array_create(pool, dim);
-	bit_array_clear_all(key);
-	bit_array_add_word(key, num);
+	bit_array_add_word(key, num, dim);
 	return key;
 }
 
@@ -70,8 +69,8 @@ next_jump_in_check_2d() {
 				test_cases[i].test_point);
 		z_address *expected = create_key2d_from_number(&pool, dim,
 				test_cases[i].expected);
-		get_next_zvalue(value, z_lower_bound, z_upper_bound, result);
-		is(bit_array_cmp(result, expected), 0, "%" PRIu64 " -> %" PRIu64,
+		get_next_zvalue(value, z_lower_bound, z_upper_bound, result, dim);
+		is(bit_array_cmp(result, expected, dim), 0, "%" PRIu64 " -> %" PRIu64,
 				test_cases[i].test_point, test_cases[i].expected);
 		bit_array_free(&pool, value);
 		bit_array_free(&pool, expected);
@@ -129,7 +128,7 @@ is_relevant_check_2d() {
         z_address *value = create_key2d_from_number(&pool, dim,
         		test_cases[i].test_point);
         bool is_relevant = z_value_is_relevant(value, z_lower_bound,
-                z_upper_bound);
+                z_upper_bound, dim);
         is(is_relevant, test_cases[i].expected,
                 is_relevant ? "in query box" : "not in query box");
         bit_array_free(&pool, value);
@@ -143,7 +142,7 @@ is_relevant_check_2d() {
 }
 
 static void
-zcurve_C_test_init(size_t cache_size)
+zcurve_C_test_init()
 {
 	/* Suppress info messages. */
 	say_set_log_level(S_WARN);
@@ -153,7 +152,7 @@ zcurve_C_test_init(size_t cache_size)
 }
 
 int main() {
-	zcurve_C_test_init(1LLU * 1024LLU * 1024LLU * 1024LLU);
+	zcurve_C_test_init();
 
 	next_jump_in_check_2d();
     is_relevant_check_2d();

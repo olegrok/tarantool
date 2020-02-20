@@ -7,9 +7,6 @@
 #define bitsetX_wrd(wrdbits,pos) ((pos) / (wrdbits))
 #define bitsetX_idx(wrdbits,pos) ((pos) % (wrdbits))
 
-#define bitset64_wrd(pos) ((pos) >> 6ULL)
-#define bitset64_idx(pos) ((pos) & 63ULL)
-
 #define bitset2_get(arr,wrd,idx)     (((arr)[wrd] >> (idx)) & 0x1)
 #define bitset2_set(arr,wrd,idx)     ((arr)[wrd] |=  _TYPESHIFT(arr,1,idx))
 #define bitset2_del(arr,wrd,idx)     ((arr)[wrd] &=~ _TYPESHIFT(arr,1,idx))
@@ -26,19 +23,11 @@
 #define bitset_op(func,arr,pos)      func(arr, bitset_wrd(arr,pos), bitset_idx(arr,pos))
 #define bitset_op2(func,arr,pos,bit) func(arr, bitset_wrd(arr,pos), bitset_idx(arr,pos), bit)
 
-#define bitset_get(arr,pos)     bitset_op(bitset2_get, arr, pos)
-#define bitset_set(arr,pos)     bitset_op(bitset2_set, arr, pos)
-#define bitset_del(arr,pos)     bitset_op(bitset2_del, arr, pos)
-#define bitset_tgl(arr,pos)     bitset_op(bitset2_tgl, arr, pos)
-#define bitset_cpy(arr,pos,bit) bitset_op2(bitset2_cpy, arr, pos, bit)
-
-#define bit_array_get(arr,i)      bitset_get((arr)->words, i)
-#define bit_array_set(arr,i)      bitset_set((arr)->words, i)
-#define bit_array_clear(arr,i)    bitset_del((arr)->words, i)
-#define bit_array_toggle(arr,i)   bitset_tgl((arr)->words, i)
-#define bit_array_assign(arr,i,c) bitset_cpy((arr)->words,i,c)
-
-#define bit_array_num_of_words(arr) ((arr)->num_of_words)
+#define bit_array_get(arr,pos)        bitset_op(bitset2_get, arr, pos)
+#define bit_array_set(arr,pos)        bitset_op(bitset2_set, arr, pos)
+#define bit_array_clear(arr,pos)      bitset_op(bitset2_del, arr, pos)
+#define bit_array_toggle(arr,pos)     bitset_op(bitset2_tgl, arr, pos)
+#define bit_array_assign(arr,pos,bit) bitset_op2(bitset2_cpy, arr, pos, bit)
 
 #define bitmask(nbits,type) ((nbits) ? ~(type)0 >> (sizeof(type)*8-(nbits)): (type)0)
 

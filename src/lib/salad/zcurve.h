@@ -24,7 +24,7 @@ ones(struct mempool *pool, uint8_t part_count);
 
 void
 get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
-		const z_address *upper_bound, z_address *out);
+		const z_address *upper_bound, z_address *out, uint8_t index_dim);
 
 /*
  * Provided a minimum Z-address, a maximum Z-address, and a test Z-address,
@@ -33,6 +33,6 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
  */
 bool
 z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
-		const z_address *upper_bound);
+		const z_address *upper_bound, uint8_t index_dim);
 
 #endif //TARANTOOL_ZCURVE_H

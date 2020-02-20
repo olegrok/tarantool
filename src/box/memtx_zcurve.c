@@ -30,15 +30,12 @@
  */
 
 #include <small/mempool.h>
-#include <small/small.h>
 #include <salad/zcurve.h>
 #include <third_party/qsort_arg.h>
 
 #include "memtx_engine.h"
 #include "space.h"
-#include "schema.h" /* space_cache_find() */
 #include "errinj.h"
-#include "memory.h"
 #include "fiber.h"
 #include "tuple.h"
 
@@ -50,6 +47,11 @@ struct memtx_zcurve_data {
 	z_address *z_address;
 	/* Tuple that this node is represents. */
 	struct tuple *tuple;
+};
+
+struct memtx_zcurve_arg {
+	struct key_def *pk_def;
+	uint8_t part_count;
 };
 
 /**
@@ -77,23 +79,23 @@ memtx_zcurve_data_is_equal(const struct memtx_zcurve_data *a,
  * @retval <0 if tuple < key in terms of def.
  * @retval >0 if tuple > key in terms of def.
  */
-static inline int
+static inline int8_t
 memtx_zcurve_compare_key(const struct memtx_zcurve_data *element,
-						 const z_address* key_data)
+						 const z_address* key_data,
+						 uint8_t part_count)
 {
-	return z_value_cmp(element->z_address, key_data);
+	return z_value_cmp(element->z_address, key_data, part_count);
 }
 
-static inline int
-memtx_zcurve_elem_compare(const void *a, const void *b, void *c)
+static inline int8_t
+memtx_zcurve_elem_compare(const struct memtx_zcurve_data *a,
+		const struct memtx_zcurve_data *b, const struct memtx_zcurve_arg *c)
 {
-	const struct memtx_zcurve_data *elem_a = a;
-	const struct memtx_zcurve_data *elem_b = b;
-	struct key_def *pk_def = c;
-	int result = z_value_cmp(elem_a->z_address, elem_b->z_address);
+	int8_t result = z_value_cmp(a->z_address,
+			b->z_address, c->part_count);
 	if (result == 0) {
-		return tuple_compare(elem_a->tuple, HINT_NONE, elem_b->tuple,
-							 HINT_NONE, pk_def);
+		return tuple_compare(a->tuple, HINT_NONE, b->tuple,
+							 HINT_NONE, c->pk_def);
 	}
 	return result;
 }
@@ -102,11 +104,12 @@ memtx_zcurve_elem_compare(const void *a, const void *b, void *c)
 #define BPS_TREE_BLOCK_SIZE (512)
 #define BPS_TREE_EXTENT_SIZE MEMTX_EXTENT_SIZE
 #define BPS_TREE_COMPARE(a, b, arg) memtx_zcurve_elem_compare(&a, &b, arg)
-#define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b)
+#define BPS_TREE_COMPARE_KEY(a, b, arg) memtx_zcurve_compare_key(&a, b, \
+	arg->part_count)
 #define BPS_TREE_IS_IDENTICAL(a, b) memtx_zcurve_data_is_equal(&a, &b)
 #define bps_tree_elem_t struct memtx_zcurve_data
 #define bps_tree_key_t z_address *
-#define bps_tree_arg_t struct key_def *
+#define bps_tree_arg_t struct memtx_zcurve_arg *
 
 #include "salad/bps_tree.h"
 
@@ -125,9 +128,10 @@ struct memtx_zcurve_index {
 	struct memtx_zcurve tree;
 	struct memtx_zcurve_data *build_array;
 	size_t build_array_size, build_array_alloc_size;
-	struct key_def *pk_def;
+	struct memtx_zcurve_arg arg;
 	struct bit_array_interleave_lookup_table *lookup_tables;
 	struct mempool bit_array_pool;
+	bit_array *buffer;
 };
 
 /* {{{ Utilities. *************************************************/
@@ -262,17 +266,17 @@ mp_decode_to_uint64(const char **mp, enum field_type type)
 
 static z_address*
 mp_decode_part(struct mempool *pool, const char *mp,
-		uint32_t part_count, const struct memtx_zcurve_index *index,
-				uint32_t even)
+		uint8_t part_count, const struct memtx_zcurve_index *index,
+				uint8_t even)
 {
-	const uint32_t size = part_count / 2;
+	const uint8_t size = part_count / 2;
 	uint64_t key_parts[size];
-	for (uint32_t i = 0; i < part_count; ++i) {
+	for (uint8_t i = 0; i < part_count; ++i) {
 		if (i % 2 != even) {
 			mp_next(&mp);
 			continue;
 		}
-		uint32_t j = i / 2;
+		uint8_t j = i / 2;
 		if (unlikely(mp_typeof(*mp) == MP_NIL)) {
 			if (i % 2 == 0) {
 				key_parts[j] = 0;
@@ -296,11 +300,11 @@ mp_decode_part(struct mempool *pool, const char *mp,
 
 static z_address*
 mp_decode_key(struct mempool *pool,const char *mp,
-		uint32_t part_count, const struct memtx_zcurve_index *index)
+		uint8_t part_count, const struct memtx_zcurve_index *index)
 {
 	uint64_t key_parts[part_count];
 	enum field_type type = index->base.def->key_def->parts->type;
-	for (uint32_t i = 0; i < part_count; ++i) {
+	for (uint8_t i = 0; i < part_count; ++i) {
 		key_parts[i] = mp_decode_to_uint64(&mp, type);
 	}
 	z_address *result = z_value_create(pool, part_count);
@@ -333,7 +337,6 @@ struct tree_iterator {
 
 	z_address *lower_bound;
 	z_address *upper_bound;
-	z_address *next_zvalue;
 
 	/** Memory pool the iterator was allocated from. */
 	struct mempool *pool;
@@ -363,10 +366,6 @@ tree_iterator_free(struct iterator *iterator)
 		z_value_free(&index->bit_array_pool, it->upper_bound);
 		it->upper_bound = NULL;
 	}
-	if (it->next_zvalue != NULL) {
-		z_value_free(&index->bit_array_pool, it->next_zvalue);
-		it->next_zvalue = NULL;
-	}
 	struct tuple *tuple = it->current.tuple;
 	if (tuple != NULL) {
 		tuple_unref(tuple);
@@ -387,6 +386,7 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 	struct memtx_zcurve_index *index =
 			(struct memtx_zcurve_index *)iterator->index;
 	struct tree_iterator *it = tree_iterator(iterator);
+	uint8_t part_count = index->arg.part_count;
 	struct memtx_zcurve_data *res =
 			memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 
@@ -397,18 +397,18 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 		}
 
 		if (z_value_is_relevant(res->z_address, it->lower_bound,
-				it->upper_bound)) {
+				it->upper_bound, part_count)) {
 			break;
 		}
 
-		if (z_value_cmp(res->z_address, it->upper_bound) > 0) {
+		if (z_value_cmp(res->z_address, it->upper_bound, part_count) > 0) {
 			goto out;
 		}
 
 		get_next_zvalue(res->z_address, it->lower_bound, it->upper_bound,
-				it->next_zvalue);
+				index->buffer, part_count);
 		it->tree_iterator = memtx_zcurve_lower_bound(&index->tree,
-				it->next_zvalue, &is_relevant);
+				index->buffer, &is_relevant);
 		res = memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 	} while (!is_relevant);
 
@@ -464,9 +464,9 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 	/* Use user key def to save a few loops. */
-	// TODO: check that value is relevant and not at the end
 	if (res == NULL ||
-			memtx_zcurve_compare_key(res, it->current.z_address) != 0) {
+			memtx_zcurve_compare_key(res, it->current.z_address,
+					index->base.def->key_def->part_count) != 0) {
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
 		it->current.z_address = NULL;
@@ -537,8 +537,9 @@ memtx_zcurve_index_free(struct memtx_zcurve_index *index)
 	free(index->build_array);
 	memtx_zcurve_destroy(&index->tree);
 
-	key_def_delete(index->pk_def);
+	key_def_delete(index->arg.pk_def);
 	bit_array_interleave_free_lookup_tables(index->lookup_tables);
+	mempool_free(&index->bit_array_pool, index->buffer);
 	mempool_destroy(&index->bit_array_pool);
 	free(index);
 }
@@ -561,7 +562,7 @@ memtx_zcurve_index_update_def(struct index *base)
 	/*
 	 * We use extended key def for non-unique indexes.
 	 */
-	index->tree.arg = index->pk_def;
+	index->tree.arg = &index->arg;
 }
 
 static bool
@@ -691,7 +692,7 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 		return NULL;
 	}
 
-	uint32_t key_def_part_count = base->def->key_def->part_count;
+	uint8_t dim = base->def->key_def->part_count;
 
 	iterator_create(&it->base, base);
 	it->pool = &memtx->zcurve_iterator_pool;
@@ -700,19 +701,14 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->type = type;
 	it->lower_bound = NULL;
 	it->upper_bound = NULL;
-	it->next_zvalue = z_value_create(
-			&index->bit_array_pool, key_def_part_count);
 
 	if (part_count == 0 || type == ITER_ALL) {
-		it->lower_bound = zeros(&index->bit_array_pool,
-				key_def_part_count);
-		it->upper_bound = ones(&index->bit_array_pool,
-				key_def_part_count);
+		it->lower_bound = zeros(&index->bit_array_pool, dim);
+		it->upper_bound = ones(&index->bit_array_pool, dim);
 	} else if (base->def->key_def->part_count == part_count) {
 		it->lower_bound = mp_decode_key(&index->bit_array_pool,
-				key, key_def_part_count, index);
-		it->upper_bound = ones(&index->bit_array_pool,
-				key_def_part_count);
+				key, dim, index);
+		it->upper_bound = ones(&index->bit_array_pool, dim);
 	} else if (base->def->key_def->part_count * 2 == part_count) {
 		it->lower_bound = mp_decode_part(&index->bit_array_pool,
 				key, part_count, index, 0);
@@ -794,7 +790,7 @@ memtx_zcurve_index_end_build(struct index *base)
 {
 	struct memtx_zcurve_index *index = (struct memtx_zcurve_index *)base;
 	qsort_arg(index->build_array, index->build_array_size,
-		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, index->pk_def);
+		  sizeof(index->build_array[0]), memtx_zcurve_qcompare, &index->arg);
 	memtx_zcurve_build(&index->tree, index->build_array,
 			 index->build_array_size);
 
@@ -942,7 +938,12 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	mempool_create(&index->bit_array_pool, cord_slab_cache(),
 				   bit_array_bsize(part_count));
 
-	index->pk_def = pk_def;
+	index->buffer = z_value_create(&index->bit_array_pool, part_count);
+	if (index->buffer == NULL) {
+		free(index);
+		return NULL;
+	}
+
 	index->lookup_tables = bit_array_interleave_new_lookup_tables(
 			&index->bit_array_pool, part_count);
 	if (index->lookup_tables == NULL) {
@@ -950,7 +951,9 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 		return NULL;
 	}
 
-	memtx_zcurve_create(&index->tree, index->pk_def, memtx_index_extent_alloc,
+	index->arg.pk_def = pk_def;
+	index->arg.part_count = base_def->key_def->part_count;
+	memtx_zcurve_create(&index->tree, &index->arg, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);
 	return &index->base;
 }
