@@ -1,7 +1,6 @@
 #include "zcurve.h"
 
-const uint8_t KEY_SIZE_IN_BITS = 64;
-const uint8_t IS_RELEVANT_MASK_MAXLEN = 32;
+#define IS_RELEVANT_MASK_MAXLEN 32U
 
 z_address *
 zeros(struct mempool *pool, uint8_t part_count)
@@ -37,31 +36,81 @@ get_step(uint8_t index_dim, uint16_t bit_position)
 	return bit_position / index_dim;
 }
 
+static inline uint8_t
+compare_words(const void *restrict value, const void *restrict lower,
+		const void *restrict upper)
+{
+	const uint8_t *first = value, *second = lower, *third = upper;
+	uint8_t result = 0;
+	uint8_t len = sizeof(uint64_t) / sizeof(uint8_t);
+	for (uint8_t i = len - 1;; i--) {
+		if (first[i] == second[i] && first[i] == third[i])
+			result++;
+		else
+			break;
+		if (i == 0)
+			break;
+	}
+	return result;
+}
+
 bool
-z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
-		const z_address *upper_bound, uint8_t index_dim)
+z_value_is_relevant(const z_address *restrict z_value,
+		const z_address *restrict lower_bound,
+		const z_address *restrict upper_bound, uint8_t index_dim)
 {
 	assert(IS_RELEVANT_MASK_MAXLEN > index_dim);
 
 	uint32_t save_min = 0, save_max = 0;
-	uint32_t is_relevant_mask = (UINT32_MAX >>
+	const uint32_t is_relevant_mask = (UINT32_MAX >>
 			(IS_RELEVANT_MASK_MAXLEN - index_dim));
 
 	uint16_t bp = bit_array_length(index_dim);
 
+	uint64_t bit_cursor = 0;
+	uint8_t word_cursor = index_dim;
+	uint64_t z_value_word = 0, lower_bound_word = 0, upper_bound_word = 0;
+	uint8_t dim = 0;
 	do {
+		if (dim == 0)
+			dim = index_dim;
+
+		if (bit_cursor == 0) {
+reset_bit_cursor:
+			bit_cursor = 1ULL << 63ULL;
+			word_cursor--;
+			z_value_word = bit_array_get_word(z_value, word_cursor);
+			lower_bound_word = bit_array_get_word(lower_bound, word_cursor);
+			upper_bound_word = bit_array_get_word(upper_bound, word_cursor);
+
+			uint8_t skip_bytes = compare_words(&z_value_word,
+					&lower_bound_word, &upper_bound_word);
+			if (skip_bytes > 0) {
+				bp -= skip_bytes * CHAR_BIT;
+				if (bp == 0)
+					return true;
+				if (skip_bytes == sizeof(uint64_t))
+					goto reset_bit_cursor;
+				bit_cursor >>= skip_bytes * CHAR_BIT;
+			}
+
+			dim = get_dim(index_dim, bp) + 1;
+		}
+
+		bool z_value_bp = z_value_word & bit_cursor;
+		bool lower_bound_bp = lower_bound_word & bit_cursor;
+		bool upper_bound_bp = upper_bound_word & bit_cursor;
+
 		bp--;
-		const bool z_value_bp = bit_array_get(z_value, bp);
-		const bool lower_bound_bp = bit_array_get(lower_bound, bp);
-		const bool upper_bound_bp = bit_array_get(upper_bound, bp);
+		dim--;
+		bit_cursor >>= 1ULL;
 
 		if (z_value_bp == lower_bound_bp && z_value_bp == upper_bound_bp) {
 			continue;
 		}
-		const uint8_t dim = get_dim(index_dim, bp);
 
 		if (z_value_bp != lower_bound_bp) {
-			const bool save_min_dim_bit = save_min & (1u << dim);
+			bool save_min_dim_bit = save_min & (1u << dim);
 			if (z_value_bp > lower_bound_bp && save_min_dim_bit == 0) {
 				save_min |= (1u << dim);
 			} else if (z_value_bp < lower_bound_bp && save_min_dim_bit == 0) {
@@ -86,32 +135,56 @@ z_value_is_relevant(const z_address *z_value, const z_address *lower_bound,
 }
 
 void
-get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
-		const z_address *upper_bound, z_address *out, uint8_t index_dim)
+get_next_zvalue(const z_address *restrict z_value,
+		const z_address *restrict lower_bound,
+		const z_address *restrict upper_bound,
+		z_address *restrict out, uint8_t index_dim)
 {
 	bit_array_copy(out, z_value, index_dim);
 	const uint16_t key_len = bit_array_length(index_dim);
 
 	int8_t flag[index_dim], out_step[index_dim];
-	int16_t save_min[index_dim], save_max[index_dim];
+	int8_t save_min[index_dim], save_max[index_dim];
 
-	for (uint8_t i = 0; i < index_dim; ++i) {
-		flag[i] = 0;
-		out_step[i] = INT8_MIN;
-		save_min[i] = -1;
-		save_max[i] = -1;
-	}
+	memset(flag, 0, index_dim);
+	memset(out_step, INT8_MIN, index_dim);
+	memset(save_min, -1, index_dim);
+	memset(save_max, -1, index_dim);
 
 	uint32_t is_relevant_mask = (UINT32_MAX >>
 			(IS_RELEVANT_MASK_MAXLEN - index_dim));
 	uint32_t save_min_mask = 0, save_max_mask = 0;
 	uint16_t bp = key_len;
-	do {
-		bp--;
 
-		const bool z_value_bp = bit_array_get(z_value, bp);
-		const bool lower_bound_bp = bit_array_get(lower_bound, bp);
-		const bool upper_bound_bp = bit_array_get(upper_bound, bp);
+	uint64_t bit_cursor = 0;
+	uint64_t z_value_word = 0, lower_bound_word = 0, upper_bound_word = 0;
+	uint8_t word_cursor = index_dim;
+	do {
+		if (bit_cursor == 0) {
+reset_bit_cursor:
+			bit_cursor = 1ULL << 63ULL;
+			word_cursor--;
+			z_value_word = bit_array_get_word(z_value, word_cursor);
+			lower_bound_word = bit_array_get_word(lower_bound, word_cursor);
+			upper_bound_word = bit_array_get_word(upper_bound, word_cursor);
+
+			uint8_t skip_bytes = compare_words(&z_value_word,
+					&lower_bound_word, &upper_bound_word);
+			if (skip_bytes > 0) {
+				bp -= skip_bytes * CHAR_BIT;
+				if (bp == 0)
+					break;
+				if (skip_bytes == sizeof(uint64_t))
+					goto reset_bit_cursor;
+				bit_cursor >>= skip_bytes * CHAR_BIT;
+			}
+		}
+
+		const bool z_value_bp = z_value_word & bit_cursor;
+		const bool lower_bound_bp = lower_bound_word & bit_cursor;
+		const bool upper_bound_bp = upper_bound_word & bit_cursor;
+		bit_cursor >>= 1ULL;
+		bp--;
 
 		if (z_value_bp == lower_bound_bp && z_value_bp == upper_bound_bp) {
 			continue;
@@ -148,28 +221,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 			save_min_mask == is_relevant_mask) {
 			break;
 		}
-	} while (bp > 0);
-
-#ifndef NDEBUG
-	/*
-	 * Next intersection point check.
-	 * For performance reasons this check is
-	 * excluded in not debug mode as
-	 * this function should be called
-	 * if "is_relevant" condition is false.
-	 * */
-	bool is_nip = true;
-	for (uint8_t dim = 0; dim < index_dim; ++dim) {
-		if (flag[dim] != 0) {
-			is_nip = false;
-			break;
-		}
-	}
-
-	if (is_nip) {
-		return;
-	}
-#endif
+	} while (bp != 0);
 
 	uint8_t max_dim = 0;
 	int8_t max_out_step = -1;
@@ -193,13 +245,12 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 			}
 		}
 		/* some attributes have to be updated for further processing */
-		uint16_t max_bp_dim = get_dim(index_dim, max_bp);
+		uint8_t max_bp_dim = get_dim(index_dim, max_bp);
 		save_min[max_bp_dim] = get_step(index_dim, max_bp);
 		flag[max_bp_dim] = 0;
 	}
 
 	for (uint8_t dim = 0; dim < index_dim; ++dim) {
-		const uint16_t length = index_dim * KEY_SIZE_IN_BITS - 1;
 		if (flag[dim] >= 0) {
 			/* nip has not fallen below the minimum in dim */
 			if (max_bp <= bit_position(index_dim, dim, save_min[dim])) {
@@ -208,11 +259,8 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 				 * bit position < max_bp to 0 because nip
 				 * would not surely get below the lower_bound
 				 */
-				for (uint16_t bit_pos = dim; bit_pos < length;
+				for (uint16_t bit_pos = dim; bit_pos < max_bp;
 					 bit_pos += index_dim) {
-					if (bit_pos >= max_bp) {
-						break;
-					}
 					bit_array_clear(out, bit_pos);
 				}
 			} else {
@@ -221,11 +269,8 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 				 * bit position < max_bp to the value of
 				 * corresponding bits of the lower_bound
 				 */
-				for (uint16_t bit_pos = dim; bit_pos < length;
+				for (uint16_t bit_pos = dim; bit_pos < max_bp;
 					 bit_pos += index_dim) {
-					if (bit_pos >= max_bp) {
-						break;
-					}
 					bit_array_assign(out, bit_pos,
 										 bit_array_get(lower_bound, bit_pos));
 				}
@@ -237,7 +282,7 @@ get_next_zvalue(const z_address *z_value, const z_address *lower_bound,
 			 * corresponding bits of the lower_bound because the minimum would not
 			 * be exceeded otherwise
 			 */
-			for (bp = dim; bp < length; bp += index_dim) {
+			for (bp = dim; bp < key_len; bp += index_dim) {
 				bit_array_assign(out, bp, bit_array_get(lower_bound, bp));
 			}
 		}

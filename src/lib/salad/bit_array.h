@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <small/mempool.h>
 
-typedef uint64_t bit_array;
+typedef uint_fast64_t bit_array;
 typedef uint64_t word_t;
 typedef uint16_t bit_index_t;
 typedef uint8_t word_size_t;
