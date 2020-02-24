@@ -16,10 +16,10 @@ enum {
 	ZCURVE_MAX_DIMENSION = 20
 };
 
-z_address*
+z_address *
 zeros(struct mempool *pool, uint8_t part_count);
 
-z_address*
+z_address *
 ones(struct mempool *pool, uint8_t part_count);
 
 void

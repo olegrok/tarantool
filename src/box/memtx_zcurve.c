@@ -130,8 +130,8 @@ struct memtx_zcurve_index {
 	size_t build_array_size, build_array_alloc_size;
 	struct memtx_zcurve_arg arg;
 	struct bit_array_interleave_lookup_table *lookup_tables;
-	struct mempool bit_array_pool;
 	bit_array *buffer;
+	struct mempool bit_array_pool;
 };
 
 /* {{{ Utilities. *************************************************/
@@ -264,38 +264,34 @@ mp_decode_to_uint64(const char **mp, enum field_type type)
 	}
 }
 
-static z_address*
-mp_decode_part(struct mempool *pool, const char *mp,
+static void
+mp_decode_part(const char *mp,
 		uint8_t part_count, const struct memtx_zcurve_index *index,
-				uint8_t even)
+		bit_array *lower_bound, bit_array *upper_bound)
 {
 	const uint8_t size = part_count / 2;
-	uint64_t key_parts[size];
+	uint64_t key_parts_lower_bound[size];
+	uint64_t key_parts_upper_bound[size];
 	for (uint8_t i = 0; i < part_count; ++i) {
-		if (i % 2 != even) {
-			mp_next(&mp);
-			continue;
-		}
 		uint8_t j = i / 2;
+		uint64_t key = 0;
 		if (unlikely(mp_typeof(*mp) == MP_NIL)) {
-			if (i % 2 == 0) {
-				key_parts[j] = 0;
-			} else {
-				key_parts[j] = -1ULL;
-			}
+			key = (i % 2 == 0) ? 0 : -1ULL;
 			mp_next(&mp);
 		} else {
-			key_parts[j] = mp_decode_to_uint64(&mp,
+			key = mp_decode_to_uint64(&mp,
 					index->base.def->key_def->parts->type);
 		}
+		if (i % 2 == 0)
+			key_parts_lower_bound[j] = key;
+		else
+			key_parts_upper_bound[j] = key;
 	}
 
-	z_address *result = z_value_create(pool, size);
-	if (result == NULL) {
-		return NULL;
-	}
-	bit_array_interleave(index->lookup_tables, key_parts, result);
-	return result;
+	bit_array_interleave(index->lookup_tables,
+			key_parts_lower_bound, lower_bound);
+	bit_array_interleave(index->lookup_tables,
+			key_parts_upper_bound, upper_bound);
 }
 
 static z_address*
@@ -463,9 +459,9 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	tuple_unref(it->current.tuple);
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
-	/* Use user key def to save a few loops. */
+
 	if (res == NULL ||
-			memtx_zcurve_compare_key(res, it->current.z_address,
+			z_value_cmp(res->z_address, it->current.z_address,
 					index->base.def->key_def->part_count) != 0) {
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
@@ -515,6 +511,16 @@ tree_iterator_start(struct iterator *iterator, struct tuple **ret)
 		memtx_zcurve_lower_bound(tree, it->lower_bound, &exact);
 	if (type == ITER_EQ && !exact)
 		return 0;
+
+	if (exact) {
+		struct memtx_zcurve_data *res = memtx_zcurve_iterator_get_elem(
+				&index->tree, &it->tree_iterator);
+		*ret = res->tuple;
+		tuple_ref(*ret);
+		it->current = *res;
+		tree_iterator_set_next_method(it);
+		return 0;
+	}
 
 	tree_iterator_scroll(iterator, ret);
 	if (*ret != NULL) {
@@ -669,6 +675,7 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 		return NULL;
 	}
 
+	uint8_t index_dim = base->def->key_def->part_count;
 	if (part_count == 0) {
 		/*
 		 * If no key is specified, downgrade equality
@@ -676,7 +683,7 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 		 */
 		type = ITER_GE;
 		key = NULL;
-	} else if (base->def->key_def->part_count * 2 == part_count
+	} else if (index_dim * 2 == part_count
 		&& type != ITER_ALL) {
 		/*
 		 * If part_count is twice greater than key_def.part_count
@@ -692,8 +699,6 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 		return NULL;
 	}
 
-	uint8_t dim = base->def->key_def->part_count;
-
 	iterator_create(&it->base, base);
 	it->pool = &memtx->zcurve_iterator_pool;
 	it->base.next = tree_iterator_start;
@@ -703,17 +708,16 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->upper_bound = NULL;
 
 	if (part_count == 0 || type == ITER_ALL) {
-		it->lower_bound = zeros(&index->bit_array_pool, dim);
-		it->upper_bound = ones(&index->bit_array_pool, dim);
+		it->lower_bound = zeros(&index->bit_array_pool, index_dim);
+		it->upper_bound = ones(&index->bit_array_pool, index_dim);
 	} else if (base->def->key_def->part_count == part_count) {
 		it->lower_bound = mp_decode_key(&index->bit_array_pool,
-				key, dim, index);
-		it->upper_bound = ones(&index->bit_array_pool, dim);
+				key, index_dim, index);
+		it->upper_bound = ones(&index->bit_array_pool, index_dim);
 	} else if (base->def->key_def->part_count * 2 == part_count) {
-		it->lower_bound = mp_decode_part(&index->bit_array_pool,
-				key, part_count, index, 0);
-		it->upper_bound = mp_decode_part(&index->bit_array_pool,
-				key, part_count, index, 1);
+		it->lower_bound  = z_value_create(&index->bit_array_pool, index_dim);
+		it->upper_bound  = z_value_create(&index->bit_array_pool, index_dim);
+		mp_decode_part(key, part_count, index, it->lower_bound, it->upper_bound);
 	} else {
 		unreachable();
 	}
