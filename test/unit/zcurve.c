@@ -137,7 +137,7 @@ is_relevant_check_2d_equal()
 	mempool_create(&pool, cord_slab_cache(), bit_array_bsize(dim));
 
 	struct test_case {
-		uint64_t point[dim];
+		uint64_t point[2];
 		bool expected;
 	};
 
@@ -189,7 +189,7 @@ is_relevant_check_3d()
 				   bit_array_bsize(dim));
 	header();
 	struct test_case {
-		uint64_t point[dim];
+		uint64_t point[3];
 		bool expected;
 	};
 	struct test_case test_cases[] = {
