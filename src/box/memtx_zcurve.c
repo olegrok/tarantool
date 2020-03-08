@@ -392,6 +392,12 @@ tree_iterator_scroll(struct iterator *iterator, struct tuple **ret) {
 			goto out;
 		}
 
+		if (part_count == 1) {
+			if (bit_array_cmp(res->z_address, it->upper_bound, part_count) > 0)
+				goto out;
+			break;
+		}
+
 		if (z_value_is_relevant(res->z_address, it->lower_bound,
 				it->upper_bound, part_count)) {
 			break;
@@ -460,9 +466,10 @@ tree_iterator_next_equal(struct iterator *iterator, struct tuple **ret)
 	struct memtx_zcurve_data *res =
 		memtx_zcurve_iterator_get_elem(&index->tree, &it->tree_iterator);
 
+	const size_t size =
+			index->base.def->key_def->part_count * sizeof(uint64_t);
 	if (res == NULL ||
-			z_value_cmp(res->z_address, it->current.z_address,
-					index->base.def->key_def->part_count) != 0) {
+			memcmp(res->z_address, it->current.z_address, size) != 0) {
 		iterator->next = tree_iterator_dummie;
 		it->current.tuple = NULL;
 		it->current.z_address = NULL;
@@ -704,12 +711,14 @@ memtx_zcurve_index_create_iterator(struct index *base, enum iterator_type type,
 	it->base.next = tree_iterator_start;
 	it->base.free = tree_iterator_free;
 	it->type = type;
-	it->lower_bound = NULL;
-	it->upper_bound = NULL;
 
 	if (part_count == 0 || type == ITER_ALL) {
 		it->lower_bound = zeros(&index->bit_array_pool, index_dim);
 		it->upper_bound = ones(&index->bit_array_pool, index_dim);
+	} else if (type == ITER_EQ) {
+		it->lower_bound = mp_decode_key(&index->bit_array_pool,
+				key, index_dim, index);
+		it->upper_bound = NULL;
 	} else if (base->def->key_def->part_count == part_count) {
 		it->lower_bound = mp_decode_key(&index->bit_array_pool,
 				key, index_dim, index);
