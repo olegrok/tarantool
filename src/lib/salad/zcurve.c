@@ -151,11 +151,7 @@ get_next_zvalue(const z_address *restrict z_value,
 	memset(save_min, -1, index_dim);
 	memset(save_max, -1, index_dim);
 
-	uint32_t is_relevant_mask = (UINT32_MAX >>
-			(IS_RELEVANT_MASK_MAXLEN - index_dim));
-	uint32_t save_min_mask = 0, save_max_mask = 0;
 	uint16_t bp = key_len;
-
 	uint64_t bit_cursor = 0;
 	uint64_t z_value_word = 0, lower_bound_word = 0, upper_bound_word = 0;
 	uint8_t word_cursor = index_dim;
@@ -195,7 +191,6 @@ reset_bit_cursor:
 
 		if (z_value_bp > lower_bound_bp) {
 			if (save_min[dim] == -1) {
-				save_min_mask |= (1u << dim);
 				save_min[dim] = step;
 			}
 		} else if (z_value_bp < lower_bound_bp) {
@@ -207,7 +202,6 @@ reset_bit_cursor:
 
 		if (z_value_bp < upper_bound_bp) {
 			if (save_max[dim] == -1) {
-				save_max_mask |= (1u << dim);
 				save_max[dim] = step;
 			}
 		} else if (z_value_bp > upper_bound_bp) {
@@ -215,11 +209,6 @@ reset_bit_cursor:
 				out_step[dim] = step;
 				flag[dim] = 1;
 			}
-		}
-
-		if (save_max_mask == is_relevant_mask &&
-			save_min_mask == is_relevant_mask) {
-			break;
 		}
 	} while (bp != 0);
 
