@@ -72,11 +72,12 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
 		/*
 		 * Zero key parts are allowed:
 		 * - for TREE index, all iterator types,
+		 * - for ZCURVE index, all iterator types,
 		 * - ITER_ALL iterator type, all index types
 		 * - ITER_GT iterator in HASH index (legacy)
 		 */
-		if (index_def->type == TREE || type == ITER_ALL ||
-		    (index_def->type == HASH && type == ITER_GT))
+		if (index_def->type == TREE || index_def->type == ZCURVE ||
+		type == ITER_ALL || (index_def->type == HASH && type == ITER_GT))
 			return 0;
 		/* Fall through. */
 	}
@@ -107,6 +108,28 @@ key_validate(const struct index_def *index_def, enum iterator_type type,
 			for (uint32_t part = 0; part < part_count; part++) {
 				if (key_part_validate(FIELD_TYPE_NUMBER, key,
 						      part, false))
+					return -1;
+				mp_next(&key);
+			}
+		}
+	} else if (index_def->type == ZCURVE) {
+		if ((part_count != index_def->key_def->part_count) &&
+			(part_count != index_def->key_def->part_count * 2)) {
+			diag_set(ClientError, ER_KEY_PART_COUNT,
+					 index_def->key_def->part_count * 2, part_count);
+			return -1;
+		}
+		if (part_count == index_def->key_def->part_count) {
+			const char *key_end;
+			if (key_validate_parts(index_def->key_def, key, part_count,
+								   true, &key_end) != 0) {
+				return -1;
+			}
+		} else {
+			// TODO: FIX incorrect part number in error message
+			for (uint32_t part = 0; part < part_count; part++) {
+				if (key_part_validate(index_def->key_def->parts[part / 2].type,
+									  key, part, true))
 					return -1;
 				mp_next(&key);
 			}
@@ -263,7 +286,7 @@ box_index_min(uint32_t space_id, uint32_t index_id, const char *key,
 	struct index *index;
 	if (check_index(space_id, index_id, &space, &index) != 0)
 		return -1;
-	if (index->def->type != TREE) {
+	if (index->def->type != TREE && index->def->type != ZCURVE) {
 		/* Show nice error messages in Lua. */
 		diag_set(UnsupportedIndexFeature, index->def, "min()");
 		return -1;
@@ -295,7 +318,7 @@ box_index_max(uint32_t space_id, uint32_t index_id, const char *key,
 	struct index *index;
 	if (check_index(space_id, index_id, &space, &index) != 0)
 		return -1;
-	if (index->def->type != TREE) {
+	if (index->def->type != TREE && index->def->type != ZCURVE) {
 		/* Show nice error messages in Lua. */
 		diag_set(UnsupportedIndexFeature, index->def, "max()");
 		return -1;
