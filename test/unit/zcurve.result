@@ -1,0 +1,58 @@
+	*** next_jump_in_check_2d ***
+1..13
+ok 1 - 12 -> 14
+ok 2 - 13 -> 14
+ok 3 - 16 -> 26
+ok 4 - 17 -> 26
+ok 5 - 18 -> 26
+ok 6 - 19 -> 26
+ok 7 - 20 -> 26
+ok 8 - 25 -> 26
+ok 9 - 27 -> 33
+ok 10 - 32 -> 33
+ok 11 - 34 -> 35
+ok 12 - 40 -> 48
+ok 13 - 49 -> 50
+	*** next_jump_in_check_2d: done ***
+	*** is_relevant_check_2d ***
+1..14
+ok 1 - not in query box
+ok 2 - in query box
+ok 3 - in query box
+ok 4 - not in query box
+ok 5 - not in query box
+ok 6 - in query box
+ok 7 - in query box
+ok 8 - not in query box
+ok 9 - not in query box
+ok 10 - in query box
+ok 11 - not in query box
+ok 12 - not in query box
+ok 13 - in query box
+ok 14 - not in query box
+	*** is_relevant_check_2d: done ***
+	*** is_relevant_check_2d_equal ***
+1..3
+ok 1 - not in query box
+ok 2 - in query box
+ok 3 - not in query box
+	*** is_relevant_check_2d_equal: done ***
+	*** is_relevant_check_3d ***
+1..16
+ok 1 - not in query box
+ok 2 - not in query box
+ok 3 - not in query box
+ok 4 - in query box
+ok 5 - in query box
+ok 6 - in query box
+ok 7 - in query box
+ok 8 - in query box
+ok 9 - not in query box
+ok 10 - in query box
+ok 11 - not in query box
+ok 12 - not in query box
+ok 13 - not in query box
+ok 14 - not in query box
+ok 15 - not in query box
+ok 16 - not in query box
+	*** is_relevant_check_3d: done ***
