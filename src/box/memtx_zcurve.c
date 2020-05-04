@@ -50,7 +50,7 @@ struct memtx_zcurve_data {
 };
 
 struct memtx_zcurve_arg {
-	struct key_def *pk_def;
+	struct key_def *cmp_def;
 	uint8_t part_count;
 };
 
@@ -95,7 +95,7 @@ memtx_zcurve_elem_compare(const struct memtx_zcurve_data *a,
 			b->z_address, c->part_count);
 	if (result == 0) {
 		return tuple_compare(a->tuple, HINT_NONE, b->tuple,
-							 HINT_NONE, c->pk_def);
+				HINT_NONE, c->cmp_def);
 	}
 	return result;
 }
@@ -550,7 +550,6 @@ memtx_zcurve_index_free(struct memtx_zcurve_index *index)
 	free(index->build_array);
 	memtx_zcurve_destroy(&index->tree);
 
-	key_def_delete(index->arg.pk_def);
 	bit_array_interleave_free_lookup_tables(index->lookup_tables);
 	mempool_free(&index->bit_array_pool, index->buffer);
 	mempool_destroy(&index->bit_array_pool);
@@ -583,7 +582,8 @@ memtx_zcurve_index_depends_on_pk(struct index *base)
 {
 	struct index_def *def = base->def;
 	/* See comment to memtx_zcurve_index_update_def(). */
-	return !def->opts.is_unique;
+	bool is_unique = def->key_def->part_count == def->cmp_def->part_count;
+	return !is_unique;
 }
 
 static ssize_t
@@ -940,16 +940,8 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 	/* See comment to memtx_zcurve_index_update_def(). */
 	struct index_def *base_def = index->base.def;
 	uint32_t part_count = base_def->key_def->part_count;
-	struct key_def *pk_def = key_def_cut_first(base_def->cmp_def,
-											   part_count,
-											   &fiber()->gc);
-	if (pk_def == NULL) {
-		free(index);
-		return NULL;
-	}
-
 	mempool_create(&index->bit_array_pool, cord_slab_cache(),
-				   bit_array_bsize(part_count));
+			bit_array_bsize(part_count));
 
 	index->buffer = z_value_create(&index->bit_array_pool, part_count);
 	if (index->buffer == NULL) {
@@ -964,7 +956,7 @@ memtx_zcurve_index_new(struct memtx_engine *memtx, struct index_def *def)
 		return NULL;
 	}
 
-	index->arg.pk_def = pk_def;
+	index->arg.cmp_def = base_def->cmp_def;
 	index->arg.part_count = base_def->key_def->part_count;
 	memtx_zcurve_create(&index->tree, &index->arg, memtx_index_extent_alloc,
 			  memtx_index_extent_free, memtx);

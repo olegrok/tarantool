@@ -418,7 +418,7 @@ space = nil
 parts = nil
 pk = nil
 sk = nil
-key = 0
+key = nil
 
 -------------------------------------------------------------------------------
 -- 20 is max amount of parts
